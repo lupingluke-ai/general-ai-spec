@@ -82,7 +82,7 @@ init.sh 使用的文件模板，用于生成新项目的基础文件。
 |------|---------|
 | `CLAUDE.md.tmpl` | 项目根 `CLAUDE.md`（Claude Code 入口） |
 | `AGENTS.md.tmpl` | 项目根 `AGENTS.md`（core 规则 + stack 禁令） |
-| `project.md.tmpl` | `openspec/project.md`（技术栈架构说明） |
+| `project.md.tmpl` | `openspec/project.md`（项目技术上下文与架构基线） |
 | `backlog.md.tmpl` | `product/backlog.md`（产品需求 Backlog） |
 | `prd.md.tmpl` | `product/prd/PRD-NNN.md`（Full PRD，feature 类型用） |
 | `prd-lite.md.tmpl` | `product/prd/PRD-NNN.md`（Lite PRD，bug / chore / hotfix 类型用） |
