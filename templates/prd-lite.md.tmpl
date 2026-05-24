@@ -1,0 +1,54 @@
+---
+id: PRD-NNN
+type: bug                 # bug | chore | hotfix（feature 请使用 prd.md.tmpl）
+backlog-ref: B-NNN
+module-ref: M-NNN         # 必填；与 backlog 条目的"模块"列一致；跨模块的需求必须拆
+status: draft
+created: YYYY-MM-DD
+depends-on: []            # 前置 backlog 依赖，如 [B-001, B-002]，无则 []
+change-id: kebab-case     # bug→fix-* / chore→chore-* / hotfix→hotfix-*
+design-inputs:            # 必填；prd-writer 必读这些路径作为产品语境
+  - design/modules/M-NNN-<slug>.md          # 模块设计文档（必引）
+  # - design/inputs/brainstorming/<name>.md  # 追加的原始输入（可选）
+---
+
+# <简短标题>
+
+## 背景与现象
+
+<!-- bug / hotfix：问题现象、触发条件、影响范围、复现步骤（hotfix 额外写事件严重度，如 P0/P1） -->
+<!-- chore：重构/升级/构建变更的动机、现状痛点 -->
+
+## 根因分析（bug / hotfix 必填，chore 可省）
+
+<!-- 问题的根本原因；如涉及多层，逐层说明 -->
+
+## 预期行为 / 目标状态
+
+<!-- bug / hotfix：修复后应呈现的正确行为 -->
+<!-- chore：完成后目标状态（新版本号、新目录结构、新 CI 阶段等） -->
+
+## 核心功能（Must Have，最少 1 条）
+
+> 即使是 Lite PRD 也必须保留 Must Have，以便 change-propose 的 P1/P3 复盘检查点验证范围完整性。
+
+- FR-1: <可验证的必做项>
+
+## 验收标准（AC ≥ delta specs 场景数）
+
+> AC 数量必须不少于 delta specs 中声明的场景数，保证每个场景都有对应验收条件。
+
+- AC-1: <可验证的验收条件>
+- AC-2: <可验证的验收条件>
+
+## 影响面评估
+
+- **用户侧**：<是否有行为变化、回滚策略>
+- **数据侧**：<是否需要迁移、回填>
+- **依赖侧**：<上下游系统影响>
+
+## 依赖与风险
+
+| 依赖/风险 | 影响 | 应对策略 |
+|-----------|------|----------|
+| <描述> | <影响范围> | <应对方式> |

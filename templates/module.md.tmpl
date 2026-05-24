@@ -1,0 +1,64 @@
+---
+id: M-NNN                           # 全局递增，由 module-designer 分配
+slug: kebab-case-name               # 文件名 slug
+status: planning                    # planning | active | done | deprecated
+created: YYYY-MM-DD
+depends-on: []                      # 前置模块列表，如 [M-001, M-002]
+design-inputs:                      # 参考的原始设计输入
+  - design/inputs/brainstorming/<name>.md
+  - design/inputs/figma/<name>.md
+---
+
+# M-NNN <模块名>
+
+## 模块定位
+
+这个模块在产品中承担什么角色？解决什么问题？
+
+## 模块边界
+
+**承担：**
+- <职责 1>
+- <职责 2>
+
+**不承担：**（避免职责蔓延，跨边界的需求应另开模块）
+- <明确排除的职责>
+
+## 架构
+
+<ASCII 图或文字描述，说明模块内部结构、关键组件、数据流>
+
+```
+<模块组件图示例>
+```
+
+## 对外接口
+
+| 对象 | 接口 | 说明 |
+|---|---|---|
+| M-OOO（其他模块）| <接口名> | <用途> |
+| UI 层 | <组件/路由> | <用途> |
+
+## 技术选型
+
+- **前端**：<框架/库/工具>
+- **后端**：<框架/库/工具>
+- **数据**：<存储方案>
+- **第三方**：<API/服务>
+
+## 关联 Backlog
+
+<!-- 由 module-designer 自动维护；每个 backlog 条目一行 -->
+<!-- 格式：- B-NNN <需求描述> [阶段] -->
+
+- B-NNN <需求描述> [idea]
+
+## 拆分理由
+
+<记录在 /design 对话中确定这个拆分方案的关键考虑>
+
+## 修订历史
+
+| 日期 | 修订内容 | 操作者 |
+|---|---|---|
+| YYYY-MM-DD | 首次创建 | module-designer |

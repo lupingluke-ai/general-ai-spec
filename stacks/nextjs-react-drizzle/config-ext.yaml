@@ -1,0 +1,22 @@
+# OpenSpec Config Extension: nextjs-react-drizzle
+# 合并到 core/config.yaml 的 rules 中
+
+rules:
+  proposal:
+    - 涉及数据库 schema 变更时，包含 Migration Plan
+    - 涉及 Agent 或 LLM 调用链时，说明延迟、成本和失败恢复影响
+    - 涉及认证/授权变更时，说明 RBAC 影响
+
+  specs:
+    - 涉及数据库时，说明端口、用户、数据库名和初始化前置条件
+    - 涉及流式输出时，说明事件类型、完成条件和错误行为
+    - 涉及卡片确认流时，说明中断点、恢复路径和用户分支
+
+  design:
+    - Agent graph 变更需描述节点、边和 interrupt 暂停点
+    - API 变更需描述 request/response 或 SSE event 类型
+    - 数据库变更需描述 schema、migration 和本地开发影响
+
+  tasks:
+    - 数据库相关改动作为单独任务组
+    - 初始化脚本调整与模板文件调整应拆分为独立任务组

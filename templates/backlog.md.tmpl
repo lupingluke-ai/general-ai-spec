@@ -1,0 +1,53 @@
+# Product Backlog
+
+> 系统目标全景。每个条目是一个可交付的产品需求。
+> **`模块` 列**：关联 `design/modules/M-NNN-*.md`，由 `module-designer` 自动填写。
+> **阶段/PRD/Change 列**：由 AI 自动维护（prd-writer / change-propose / change-review）。
+> **需求内容与"模块"列**：以人工为准（首次由 module-designer 对话落盘，后续可人工微调）。
+
+## 类型说明
+
+| 类型 | 含义 | change-id 前缀 | branch 前缀 | PRD |
+|------|------|---------------|-------------|-----|
+| feature | 新功能 / 能力扩展 | 无 | `feat/` | Full |
+| bug | 缺陷修复（非紧急） | `fix-` | `fix/` | Lite |
+| chore | 重构 / 升级 / 构建 / 文档 | `chore-` | `chore/` | Lite |
+| hotfix | P0/P1 紧急修复 | `hotfix-` | `hotfix/` | Lite |
+
+> 4 种类型走完全相同的流程，仅通过前缀在语义上区分（便于 git log / release notes 过滤）。
+> type 不可变：需要修改 type 时关闭旧条目，新开 B-NNN。
+> type 由 `module-designer` 在 /design 对话中为每个拆出的 idea 自动建议，Luke 对话中确认。
+
+## 阶段说明
+
+所有类型统一：
+
+| 阶段 | 含义 | 谁触发 |
+|---|---|---|
+| idea | 初步想法，尚未探索 | `module-designer`（随模块设计自动落盘）/ 人工补录 |
+| exploring | 正在调研，PRD 生成中 | Claude Code（`prd-writer`） |
+| proposed | 已生成四件套 | Claude Code（`change-propose`） |
+| done | 已归档，specs 已更新 | Claude Code（`change-review` 轮次 2） |
+
+> backlog 只有 4 个阶段（idea / exploring / proposed / done）——都有明确的 main 写入者。执行中（dispatch 领取任务）和审查中（PR review）的细粒度由 tasks.md YAML 头的 `status` 字段承担：`draft / ready / executing / review / done`。dispatch 禁碰 main 治理层，无法把细粒度反映到 backlog。
+
+## 绑定约束
+
+- **1 backlog : 1 PRD : 1 change-id** 严格绑定，保证自动化幂等性
+- 需要拆分工作量时**不要**在同一条 backlog 下塞多个 change；正确做法是让 `module-designer` 在 `/design` 对话里拆成多条 B-NNN
+- **1 backlog 归属 1 module**，跨模块的需求必须拆
+
+---
+
+<!-- 按模块分节，每个模块一个表格。模块名与 design/modules/M-NNN-*.md 的 id/slug 对应 -->
+
+## 模块：— 待生成
+
+<!-- module-designer 会按实际模块生成 `## 模块：M-NNN <模块名>` 小节及对应表格。 -->
+
+<!-- 历史 backlog（本框架启用前已存在的条目）可不填"模块"列，保留为 — -->
+
+## 模块：— 未归类
+
+| ID | 需求 | 模块 | 类型 | 阶段 | PRD | Change | 备注 |
+|---|---|---|---|---|---|---|---|

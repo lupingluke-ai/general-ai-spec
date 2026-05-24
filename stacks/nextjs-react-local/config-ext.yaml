@@ -1,0 +1,14 @@
+# OpenSpec Config Extension: nextjs-react-local
+# 合并到 core/config.yaml 的 rules 中
+
+rules:
+  proposal:
+    - 涉及 AI provider 切换时，说明环境变量名和默认值
+    - 涉及 localStorage schema 变更时，说明旧数据迁移策略
+
+  design:
+    - API 变更需描述 request/response 类型
+    - localStorage 数据结构变更需描述迁移路径
+
+  tasks:
+    - localStorage 迁移相关改动作为单独任务组

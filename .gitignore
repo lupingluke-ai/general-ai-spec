@@ -1,0 +1,26 @@
+.DS_Store
+
+# Local agent/editor state
+.claude/
+.agents/
+.worktrees/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# JavaScript/TypeScript build outputs
+node_modules/
+.next/
+dist/
+build/
+coverage/
+.turbo/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
