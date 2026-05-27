@@ -25,9 +25,9 @@
 | 阶段 | 含义 | 谁触发 |
 |---|---|---|
 | idea | 初步想法，尚未探索 | `module-designer`（随模块设计自动落盘）/ 人工补录 |
-| exploring | 正在调研，PRD 生成中 | Claude Code（`prd-writer`） |
-| proposed | 已生成四件套 | Claude Code（`change-propose`） |
-| done | 已归档，specs 已更新 | Claude Code（`change-review` 轮次 2） |
+| exploring | 正在调研，PRD 生成中 | 交互式 agent（Claude Code / Codex，`prd-writer`） |
+| proposed | 已生成四件套 | 交互式 agent（Claude Code / Codex，`change-propose`） |
+| done | 已归档，specs 已更新 | 交互式 agent（Claude Code / Codex，`change-review` 轮次 2） |
 
 > backlog 只有 4 个阶段（idea / exploring / proposed / done）——都有明确的 main 写入者。执行中（dispatch 领取任务）和审查中（PR review）的细粒度由 tasks.md YAML 头的 `status` 字段承担：`draft / ready / executing / review / done`。dispatch 禁碰 main 治理层，无法把细粒度反映到 backlog。
 

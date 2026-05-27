@@ -13,7 +13,7 @@ description: Agent-agnostic task dispatcher. Reads backlog on main to find activ
 
 1. **Runner 层**（谁触发 dispatch 运行）：cron / `/loop Nm /change-dispatch` / Codex Automation / GitHub Actions / 人工一次性触发，任选其一
 2. **Dispatch 逻辑层**（本 skill）：扫描 → 认领 → 实现 → push，不关心是谁在跑
-3. **Executor 层**（每个任务组用什么 AI）：tasks.md 任务组注释的 `执行工具:` tag 决定；dispatch 按 tag 路由
+3. **Executor 层**（每个任务组用什么执行模式）：tasks.md 任务组注释的 `执行模式:` tag 决定；dispatch 兼容旧 `执行工具:` tag
 
 **Branch-Centric 模型：** 四件套和实现代码都在 feature branch 上。dispatch 通过 main 上的 backlog 索引找到活跃 change，fetch 对应 feature branch 读取 tasks.md，实现后直接 push。
 
@@ -21,7 +21,7 @@ description: Agent-agnostic task dispatcher. Reads backlog on main to find activ
 
 ## Bash 命令规范
 
-为避免 Claude Code 权限系统对复合命令的安全确认弹窗，所有 Bash 操作必须遵循：
+为兼容 Claude Code / Codex 等不同执行环境的权限与审批模型，所有 Bash 操作必须遵循：
 
 1. **每条命令独立调用** — 不在一条 Bash 中用 `&&`、`||`、`;` 串联多条命令
 2. **管道可以用** — 单条命令内的管道（如 `git branch -r | grep feat/`）是允许的
@@ -106,7 +106,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: <你的 agent CLI> "/change-dispatch"
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # Claude CLI 使用
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}       # Codex CLI 使用
 ```
 
 优点：无本地依赖；CI 环境天然隔离；日志进 Actions 面板。
@@ -195,11 +196,11 @@ fi
 
 在满足条件的 change 中，找到满足前置条件的 `status: pending` 任务组（按文件中出现顺序），筛选规则：
 
-- 只领取 `执行工具: Codex` 的任务组（语义 = 需要自动化 runner，任意 agent 都可承接）
-- 跳过 `执行工具: Claude Code` 的任务组（语义 = 需人类在回路的交互式工作，留给 change-review 或手动）
+- 只领取 `执行模式: auto` 的任务组（兼容旧 `执行工具: Codex`；语义 = 需要自动化 runner，任意 agent 都可承接）
+- 跳过 `执行模式: interactive` 的任务组（兼容旧 `执行工具: Claude Code`；语义 = 需人类在回路的交互式工作，留给 change-review 或手动）
 - 检查任务组的约束（如"G0 完成后"），确认前置任务组已完成
 
-> **tag 语义说明**：`执行工具: Codex` 是历史命名，现指"任意 headless/自动化 runner"——不限定必须是 Codex 本身。未来可能迁移到 `执行模式: auto | interactive`，届时 dispatch 会同时兼容两种写法。
+> **tag 语义说明**：主路径使用 `执行模式: auto | interactive`。旧 `执行工具: Codex` 视为 `auto`，旧 `执行工具: Claude Code` 视为 `interactive`，仅为兼容历史 tasks.md / 归档记录。
 
 **选定后立即认领（claim）：** 默认每个 runner 每轮只认领第一个可执行任务组。将该任务组的 `status: pending` 改为 `status: executing`；若 YAML 头为 `status: ready`，同时改为 `status: executing`。commit 并 push，作为分布式锁防止其他开发者重复领取。并行来自多个 runner/worktree 同时认领不同任务组，而不是单个 runner 抢占全部任务组。
 
@@ -325,7 +326,7 @@ pnpm build
 
 1. 勾选 tasks.md 中对应任务组的所有 checkbox
 2. 将该任务组注释中的 `status: executing` 改为 `status: done`
-3. 如果该 change 所有自动化任务组（`执行工具: Codex`）都已 done：
+3. 如果该 change 所有自动化任务组（`执行模式: auto`，兼容旧 `执行工具: Codex`）都已 done：
    - 将 tasks.md YAML 头的 `status` 改为 `review`
 
 ```bash
@@ -359,7 +360,7 @@ depends-on: [change-id-1, change-id-2]
 在每个任务组的 HTML 注释中：
 
 ```markdown
-<!-- 执行工具: Codex | 约束: 串行 | status: pending -->
+<!-- 执行模式: auto | 约束: 串行 | status: pending -->
 ```
 
 status 值：`pending` → `executing` → `done`
@@ -369,13 +370,13 @@ status 值：`pending` → `executing` → `done`
 ```
 draft → ready → executing → review → done
   ↑        ↑         ↑          ↑        ↑
-  │   Claude Code  dispatch   dispatch  review
+  │ interactive   dispatch   dispatch  review
   │   pre-flight   领取时     全部完成   归档时
   │
-  Claude Code 编写中（在 feature branch）
+  交互式 agent 编写中（在 feature branch）
 ```
 
-### Backlog 状态（main 上，由 Claude Code 维护）
+### Backlog 状态（main 上，由交互式 agent 维护）
 
 ```
 idea → exploring → proposed ────────→ done
@@ -468,4 +469,4 @@ main (稳定基线)
 
 - **不做**：审查、合并到 main、分形文档同步、verify、归档（这些是 change-review 的职责）
 - **不做**：修改 main 上的任何文件（backlog、specs、project.md）
-- **不碰**：`执行工具: Claude Code` 的任务组
+- **不碰**：`执行模式: interactive` 的任务组（兼容旧 `执行工具: Claude Code`）

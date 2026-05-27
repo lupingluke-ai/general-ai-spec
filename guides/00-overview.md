@@ -20,7 +20,7 @@ L4 openspec/changes/      ← 四件套 + feature branch + Draft PR
 用户 / PM
   │  录入灵感到 design/inputs/（brainstorming / figma / interviews）
   ▼
-module-designer                 ← Claude Code（/design）
+module-designer                 ← 交互式 agent（Claude Code / Codex，/design）
   │  读 inputs + roadmap + 既有模块
   │  与用户对话：建模块 + 划边界 + 拆 idea
   │  → 生成 design/modules/M-NNN-<slug>.md（status: planning）
@@ -28,7 +28,7 @@ module-designer                 ← Claude Code（/design）
   │  → 更新 design/roadmap.md 的 AUTO 段
   │
   ▼
-prd-writer                      ← Claude Code（/prd B-NNN）
+prd-writer                      ← 交互式 agent（Claude Code / Codex，/prd B-NNN）
   │  读 backlog + 归属模块 M-NNN 文档 + design-inputs
   │  与用户对话澄清需求（边界受 module 文档约束）
   │  → 生成 PRD（product/prd/PRD-NNN.md，含 module-ref / design-inputs）
@@ -38,7 +38,7 @@ prd-writer                      ← Claude Code（/prd B-NNN）
 用户审阅 PRD                     ← 人工确认 → PRD status: approved
   │
   ▼
-change-propose                 ← Claude Code（人工触发 / 定期 /loop 15m 自动）
+change-propose                 ← 交互式 agent（Claude Code / Codex，人工触发 / 定期 /loop 15m 自动）
   │  Phase 0: 读 backlog + 读 PRD（必须 approved，粒度已在 /design 阶段确定）
   │  Phase 1: 基于 PRD 生成四件套（proposal + delta specs + design + tasks）
   │  Phase 2: 依赖分析 → 编写 tasks.md → pre-flight → 标记 ready
@@ -51,7 +51,7 @@ change-dispatch                ← dispatch runner（Codex Automation / `/loop` 
   │  （backlog 阶段保持 proposed——dispatch 不碰 main；细粒度看 tasks.md status）
   │
   ▼
-change-review                  ← Claude Code（人工 / 定期 / CI 全绿触发）
+change-review                  ← 交互式 agent（Claude Code / Codex，人工 / 定期 / CI 全绿触发）
   │  PR 审查 → 分形文档同步 → PR 合并
   │  → verify 三维度（completeness / correctness / coherence）
   │  → sync delta specs → 归档 → 更新 backlog
@@ -134,12 +134,12 @@ openspec/changes/<change-id>/
 | 阶段 | 工具 | 触发方式 |
 |------|------|----------|
 | 灵感录入 | 人工 | 写 `design/inputs/**` |
-| 模块设计 + idea 拆分 | Claude Code (module-designer) | `/design` / `/design review M-NNN` |
-| 产品定义 | Claude Code (prd-writer) | `/prd B-NNN` |
+| 模块设计 + idea 拆分 | 交互式 agent（Claude Code / Codex，module-designer） | `/design` / `/design review M-NNN` |
+| 产品定义 | 交互式 agent（Claude Code / Codex，prd-writer） | `/prd B-NNN` |
 | PRD 审阅 | 人工 | 用户确认 approved |
-| 技术规划 | Claude Code (change-propose) | 人工触发 / `/loop 15m` 定期自动 |
+| 技术规划 | 交互式 agent（Claude Code / Codex，change-propose） | 人工触发 / `/loop 15m` 定期自动 |
 | 代码执行 | change-dispatch (任意 runner：Codex Automation / `/loop` / cron / GH Actions) | 每 5 分钟自动 |
-| 审查归档 | Claude Code (change-review) | 人工触发 / `/loop 10m` 定期 |
+| 审查归档 | 交互式 agent（Claude Code / Codex，change-review） | 人工触发 / `/loop 10m` 定期 |
 
 ## 指南目录
 

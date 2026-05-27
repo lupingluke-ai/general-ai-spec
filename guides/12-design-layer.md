@@ -99,7 +99,7 @@ planning ──► active ──► done
 ```
 你：/design
   ↓
-Claude Code：（启动 module-designer）
+交互式 agent：（启动 module-designer）
   - 扫描 design/inputs/ 发现新素材
   - 读 design/roadmap.md 了解既有架构
   - 与你对话：这个灵感属于新模块还是已有模块？边界如何划？
@@ -116,7 +116,7 @@ module-designer 落盘：
 ```
 你：/design review M-002
   ↓
-Claude Code：（module-designer 增量模式）
+交互式 agent：（module-designer 增量模式）
   - 读 M-002 模块文档 + 关联 backlog
   - 与你对话：追加哪些需求？是否需要扩边界？
   ↓

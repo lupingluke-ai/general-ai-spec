@@ -46,7 +46,7 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 /change-dispatch
 ```
 
-> **执行工具 tag 语义**：tasks.md 里的 `执行工具: Codex` 表示"自动化任务组"，任意 runner 都可领取；`执行工具: Claude Code` 表示"交互式任务组"，由 change-review 或人工承接。tag 字面值保留是为了向后兼容。
+> **执行模式 tag 语义**：主路径使用 `执行模式: auto | interactive`。`auto` 表示自动化任务组，任意 runner 都可领取；`interactive` 表示交互式任务组，由 change-review 或人工承接。旧 `执行工具: Codex` / `执行工具: Claude Code` 仅作为历史兼容。
 
 ## 自动执行流程
 
@@ -69,8 +69,8 @@ Step 2: fetch 并读取 feature branch 上的 tasks.md
   → 检查 depends-on 前置 change 是否都 done
   ↓
 Step 3: 选择任务组
-  → 找第一个 status: pending 的自动化任务组（`执行工具: Codex`）
-  → 跳过交互式任务组（`执行工具: Claude Code`）
+  → 找第一个 status: pending 的自动化任务组（`执行模式: auto`）
+  → 跳过交互式任务组（`执行模式: interactive`）
   → 检查前置任务组约束
   ↓
 Step 4: 环境准备（推荐在 worktree 中）
@@ -100,7 +100,7 @@ Step 7: 更新状态、提交并推送
 
 - **Draft PR 自动更新**——展示最新代码变更
 - **GitHub CI 自动运行**——test + lint + build
-- **Claude Code 可感知**——通过 PR 状态、CI 结果、或 runner 通知（Codex Automation inbox / `/loop` 输出 / cron 日志 / GH Actions run history）
+- **交互式 agent 可感知**——通过 PR 状态、CI 结果、或 runner 通知（Codex Automation inbox / `/loop` 输出 / cron 日志 / GH Actions run history）
 
 ### 并行执行
 
@@ -120,7 +120,7 @@ G1-A ∥ G1-B ∥ G1-C  (并行，各自 worktree，push 时 rebase 解决冲突
 
 ## 自动化任务组执行规范
 
-每个自动化任务组（`执行工具: Codex`）执行时遵循：
+每个自动化任务组（`执行模式: auto`，兼容旧 `执行工具: Codex`）执行时遵循：
 
 1. **读取 design.md** — 文件清单、技术方案、接口设计
 2. **读取代码库** — 理解已有模式和约定
@@ -195,7 +195,7 @@ dispatch 有明确边界，**不做**以下事情：
 - 审查代码质量
 - 合并分支到 main
 - 修改 main 上的任何文件（backlog、specs、project.md）
-- 执行 `执行工具: Claude Code` 的任务组（交互式任务组）
+- 执行 `执行模式: interactive` 的任务组（交互式任务组，兼容旧 `执行工具: Claude Code`）
 - 运行 verify 或归档
 
 这些都是 change-review 的职责。

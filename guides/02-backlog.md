@@ -55,7 +55,7 @@
   或
 你：/design review M-002        ← 追加到已有模块
   ↓
-Claude Code：（启动 module-designer）
+交互式 agent：（启动 module-designer）
   - 扫描 design/inputs/ 与 roadmap
   - 与你对话：建新模块还是挂老模块？划哪些 idea？type 是什么？
   ↓
@@ -87,7 +87,7 @@ module-designer 一次性落盘：
 
 ```
 你：帮我分析 B-005 的需求
-Claude Code：（使用 prd-writer 与你对话，澄清需求）
+交互式 agent：（使用 prd-writer 与你对话，澄清需求）
 → 生成 product/prd/PRD-005.md (status: reviewing)
 → backlog B-005 阶段更新为 exploring，PRD 列更新为 PRD-005
 ```
@@ -96,18 +96,18 @@ Claude Code：（使用 prd-writer 与你对话，澄清需求）
 
 ```
 你：看过了，approved
-Claude Code：PRD-005 status → approved
+交互式 agent：PRD-005 status → approved
 ```
 
 详细的 PRD 流程见 [03-prd.md](./03-prd.md)。
 
 ### 4. 触发规划
 
-PRD approved 后，告诉 Claude Code：
+PRD approved 后，告诉 Claude Code 或 Codex：
 
 ```
 你：基于 B-005 开始规划
-Claude Code：（读取 PRD-005 → 使用 change-propose 生成四件套）
+交互式 agent：（读取 PRD-005 → 使用 change-propose 生成四件套）
 → backlog B-005 阶段更新为 proposed，关联 change-id
 ```
 
@@ -126,7 +126,7 @@ dispatch 执行完成后，触发审查：
 
 ```
 你：审查已完成的 change
-Claude Code：（使用 change-review 审查、合并、验证、归档）
+交互式 agent：（使用 change-review 审查、合并、验证、归档）
 → backlog B-005 阶段更新为 done
 ```
 

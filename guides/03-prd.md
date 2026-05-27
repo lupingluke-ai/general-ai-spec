@@ -1,6 +1,6 @@
 # PRD：从想法到产品定义
 
-本阶段由 Claude Code 执行，使用 `prd-writer` skill。
+本阶段由交互式 agent（Claude Code / Codex）执行，使用 `prd-writer` skill。
 
 ## 为什么需要 PRD
 
@@ -38,7 +38,7 @@ PRD 解决的问题：避免 AI 在写技术方案时同时做产品决策。先
 
 ### Step 1 — 定位 Backlog + 上下文
 
-Claude Code 读取 `product/backlog.md` 找到 B-NNN，然后按以下顺序必读上下文：
+交互式 agent 读取 `product/backlog.md` 找到 B-NNN，然后按以下顺序必读上下文：
 
 - `design/modules/M-NNN-*.md` — 模块边界、对外接口、`## 关联 Backlog` 中该行的 depends-on 注释
 - `design/inputs/**` — module 文档 `design-inputs` 字段列出的所有路径
@@ -48,7 +48,7 @@ Claude Code 读取 `product/backlog.md` 找到 B-NNN，然后按以下顺序必�
 
 ### Step 2 — 边界受模块约束的需求对话
 
-Claude Code 通过提问引导你澄清需求。**所有需求必须落在 module 文档的"承担"边界内**：
+交互式 agent 通过提问引导你澄清需求。**所有需求必须落在 module 文档的"承担"边界内**：
 
 - 小幅越界 → 提示 "要不要扩展 M-NNN 的边界？"，调整后先走 `/design review M-NNN` 再回来
 - 大幅越界 → 拒绝对话，提示 "这条需求本质属于另一个模块，建议拆到新 backlog 并挂到对应模块"
@@ -56,7 +56,7 @@ Claude Code 通过提问引导你澄清需求。**所有需求必须落在 modul
 ### Step 3 — 对话示例
 
 ```
-Claude Code：B-003 描述"AI 语音快速记账"，我有几个问题：
+交互式 agent：B-003 描述"AI 语音快速记账"，我有几个问题：
 1. 语音识别是纯离线还是需要联网？
 2. 识别结果是直接保存还是让用户确认后保存？
 3. 只支持中文还是多语言？
@@ -64,17 +64,17 @@ Claude Code：B-003 描述"AI 语音快速记账"，我有几个问题：
 
 你：联网，用户确认后保存，只支持中文，降级到手动输入
 
-Claude Code：明白。关于"用户确认"环节——是用现有表单预填充，
+交互式 agent：明白。关于"用户确认"环节——是用现有表单预填充，
             还是需要一个新的确认界面？
 
 你：用现有表单预填充
 
-Claude Code：好的，这样可以复用已有的表单验证逻辑。我来生成 PRD。
+交互式 agent：好的，这样可以复用已有的表单验证逻辑。我来生成 PRD。
 ```
 
 ### Step 4 — 生成 PRD
 
-Claude Code 创建 `product/prd/PRD-003.md`：
+交互式 agent 创建 `product/prd/PRD-003.md`：
 
 ```markdown
 ---
@@ -127,13 +127,13 @@ change-id: ai-voice-entry
 ### Step 5 — 用户审阅
 
 ```
-Claude Code：PRD-003 已生成，请审阅。重点确认：
+交互式 agent：PRD-003 已生成，请审阅。重点确认：
 - 用户故事是否覆盖了你的核心场景？
 - "明确不做"中的排除项是否正确？
 - 验收标准是否充分？
 
 你：看起来不错，approved
-Claude Code：好的，PRD-003 已标记为 approved。
+交互式 agent：好的，PRD-003 已标记为 approved。
             backlog B-003 阶段已更新为 exploring。
             你可以随时进入下一步：基于 PRD-003 做 propose。
 ```
@@ -144,7 +144,7 @@ PRD approved 后：
 
 ```
 你：基于 B-003 开始规划
-Claude Code：（读取 PRD-003 → 使用 change-propose 生成四件套）
+交互式 agent：（读取 PRD-003 → 使用 change-propose 生成四件套）
 ```
 
 ## PRD 状态

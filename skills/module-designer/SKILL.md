@@ -1,6 +1,6 @@
 ---
 name: module-designer
-description: Claude Code skill for designing product modules AND decomposing them into backlog idea entries in a single conversation. Reads design/inputs (brainstorming / figma / interviews), builds the module design document (modules/M-NNN-<slug>.md), splits the module into N backlog entries with auto-suggested types, and writes both the module and the decomposed backlog. Also syncs design/roadmap.md AUTO sections in real time. Use when the user wants to design a new module, revise an existing one, or decompose a big idea into actionable backlog entries.
+description: Interactive AI skill (Claude Code or Codex) for designing product modules AND decomposing them into backlog idea entries in a single conversation. Reads design/inputs (brainstorming / figma / interviews), builds the module design document (modules/M-NNN-<slug>.md), splits the module into N backlog entries with auto-suggested types, and writes both the module and the decomposed backlog. Also syncs design/roadmap.md AUTO sections in real time. Use when the user wants to design a new module, revise an existing one, or decompose a big idea into actionable backlog entries.
 ---
 
 # Module Designer

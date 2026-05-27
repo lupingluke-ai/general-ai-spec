@@ -1,6 +1,6 @@
 # 审查、验证与归档
 
-本阶段由 Claude Code 执行，使用 `change-review` skill。
+本阶段由交互式 agent（Claude Code / Codex）执行，使用 `change-review` skill。
 
 ## 触发方式
 
@@ -22,7 +22,7 @@
 Review skill **不直接 merge**。合并由 `auto-merge.yml` GitHub Actions 负责。
 
 ```
-Review skill (Claude Code)              GitHub Actions (auto-merge.yml)
+Review skill (Claude Code / Codex)      GitHub Actions (auto-merge.yml)
 ─────────────────────────               ──────────────────────────────
 轮次 1:
   审查 → 分形同步 → 本地 CI 修复
@@ -48,7 +48,7 @@ Review skill (Claude Code)              GitHub Actions (auto-merge.yml)
 
 ## Step 1 — 发现待审查 Change
 
-Claude Code 通过以下方式发现待审查 change：
+交互式 agent 通过以下方式发现待审查 change：
 
 - 扫描 `product/backlog.md`，找到阶段为 `proposed` 的条目，fetch 对应 feature branch，读取 tasks.md 确认 `status: review`
 - 或扫描 Draft PR 列表：`gh pr list --state open --draft`
@@ -265,7 +265,7 @@ feat/ai-voice-entry 分支已删除
 
 ```
 Day 1 10:00  用户录入 backlog B-003 (idea)
-Day 1 10:05  Claude Code 规划，生成四件套，创建 feat/ai-voice-entry + Draft PR (proposed)
+Day 1 10:05  交互式 agent 规划，生成四件套，创建 feat/ai-voice-entry + Draft PR (proposed)
 Day 1 10:10  dispatch runner 领取 G0，在 worktree 中执行，完成后直接 push
 Day 1 10:11  Draft PR 更新，CI 自动运行
 Day 1 10:15  下一轮 dispatch fetch 到 G0 代码，G1-A/G1-B 被并行领取

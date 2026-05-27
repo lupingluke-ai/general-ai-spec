@@ -56,7 +56,7 @@ brainstorming 产出的设计文档**不是 PRD**，它是"问题空间探索结
 /change-propose → dispatch → review                   # 进入常规流水线
 ```
 
-触发 `/prd` 时在对话里提一句"请参考 `docs/superpowers/specs/<date>-<topic>-design.md`"，Claude Code 会把它读进来作为上下文。
+触发 `/prd` 时在对话里提一句"请参考 `docs/superpowers/specs/<date>-<topic>-design.md`"，交互式 agent 会把它读进来作为上下文。
 
 ### 手动安装（fallback）
 
@@ -94,7 +94,7 @@ rm -rf /tmp/superpowers
 
 ### 三个集成时刻
 
-**1. propose 起稿（Claude Code）**
+**1. propose 起稿（Claude Code / Codex）**
 
 首次进入 UI 开发前，一次性注入项目设计上下文：
 
@@ -108,7 +108,7 @@ rm -rf /tmp/superpowers
 
 dispatch 按 `design.md` 的 "UI Design Notes" 小节实现，不直接调用 impeccable 命令。
 
-**3. review 轮次 1（Claude Code）**
+**3. review 轮次 1（Claude Code / Codex）**
 
 本地 CI 通过后、`gh pr ready` 之前，对本次 UI diff 跑：
 

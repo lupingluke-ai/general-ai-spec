@@ -58,7 +58,7 @@ bug / chore / hotfix 自动用 Lite 模板（省去成功指标等产品字段�
 |---|---|---|
 | 视角 | 产品（what & why） | 技术（how） |
 | 内容 | 用户故事、功能需求、验收标准 | 技术路线、文件清单、并行策略 |
-| 审阅者 | 用户/PM | Claude Code 自动 pre-flight |
+| 审阅者 | 用户/PM | 交互式 agent 自动 pre-flight |
 | 位置 | `product/prd/` | `openspec/changes/<id>/` |
 | 生命周期 | 长期保留 | 随 change 归档 |
 
@@ -90,7 +90,7 @@ B-005  AI 语音记账 - 历史记录集成  → PRD-005 → change: ai-voice-hi
 
 ### Q: 小修复也需要走四件套吗？
 
-不需要。change-propose 适用于需要 OpenSpec 管理的功能变更。小修复（bug fix、文案修改、配置调整）可以直接用 Claude Code 或手动完成，无需创建 change。
+不需要。change-propose 适用于需要 OpenSpec 管理的功能变更。小修复（bug fix、文案修改、配置调整）可以直接用 Claude Code / Codex 或手动完成，无需创建 change。
 
 判断标准：如果修改只涉及 1-2 个文件且不改变系统行为，直接改就行。
 
@@ -135,14 +135,14 @@ B-005  AI 语音记账 - 历史记录集成  → PRD-005 → change: ai-voice-hi
 1. 所选 runner 是否配置正确（Codex Automation 的名称/schedule/worktree；`/loop` 是否在运行；cron 是否加载；GH Actions 是否启用）
 2. tasks.md 的 `status` 是否为 `ready`
 3. `depends-on` 中的前置 change 是否都已 `done`
-4. 是否有任务组的 `status` 为 `pending` 且 `执行工具: Codex`（= 自动化任务组）
+4. 是否有任务组的 `status` 为 `pending` 且 `执行模式: auto`（兼容旧 `执行工具: Codex`，= 自动化任务组）
 
 ### Q: dispatch 执行出错了怎么办？
 
 1. 查看所选 runner 的日志（Codex Desktop Automation 历史 / `/loop` 输出 / `.logs/dispatch/cron.log` / GH Actions run history）
 2. 如果是代码问题：切到对应分支手动修复，保留 `Change-ID`
 3. 如果是配置问题：修复后，下一轮 runner 会自动重试
-4. 如果反复失败：将任务组的 `执行工具` 改为 `Claude Code`，手动执行
+4. 如果反复失败：将任务组的 `执行模式` 改为 `interactive`，交给 Claude Code / Codex 手动执行
 
 ### Q: 可以手动触发 dispatch 执行吗？
 
@@ -161,7 +161,7 @@ B-005  AI 语音记账 - 历史记录集成  → PRD-005 → change: ai-voice-hi
 
 ### Q: 审查发现 dispatch 实现不符合 spec 怎么办？
 
-Claude Code 会标记具体分支和问题。你有三个选择：
+交互式 agent 会标记具体分支和问题。你有三个选择：
 1. **修复**：切到分支修改，commit 后重新审查
 2. **跳过**：跳过该分支，手动实现对应功能
 3. **放弃**：回退整个 change，重新规划
@@ -177,7 +177,7 @@ Claude Code 会标记具体分支和问题。你有三个选择：
 
 ### Q: 归档时 sync delta specs 的具体操作是什么？
 
-Claude Code 自动执行：
+交互式 agent 自动执行：
 
 ```
 change 的 specs/ai-voice.md 中的 ADDED Requirements
@@ -250,7 +250,7 @@ main 是协作基线：force push 会丢掉其他人已经合并的提交，且�
 
 feature branch 的 force-with-lease 仅在 `change-review` Step 3.8 rebase-before-ready 允许——rebase 改写了 feature branch 历史但没有丢任何人的工作（所有合并都尚未发生）。且 `--force-with-lease` 会在远端有新提交时失败，防止误覆盖。
 
-其他时候（dispatch push / Claude Code 分形 sync push）都用普通 push + `git pull --rebase`。
+其他时候（dispatch push / 交互式 agent 分形 sync push）都用普通 push + `git pull --rebase`。
 
 ---
 
@@ -258,7 +258,7 @@ feature branch 的 force-with-lease 仅在 `change-review` Step 3.8 rebase-befor
 
 ### Q: 这套流程适合几个人的团队？
 
-设计上适合 1-3 人的小团队，配合 AI 工具（Claude Code 规划 + 任意 dispatch runner 执行）实现高效开发。核心思路是用 AI 承担规范化流程（规划、文档、验证），人只负责决策和需求。
+设计上适合 1-3 人的小团队，配合 AI 工具（Claude Code / Codex 规划 + 任意 dispatch runner 执行）实现高效开发。核心思路是用 AI 承担规范化流程（规划、文档、验证），人只负责决策和需求。
 
 ### Q: 没有 Codex Desktop 能用吗？
 
@@ -289,4 +289,4 @@ feature branch 的 force-with-lease 仅在 `change-review` Step 3.8 rebase-befor
 | `openspec/specs/` 主 specs | AI（change-review 归档时自动 sync） |
 | `openspec/project.md` 目录结构 | AI（分形同步时更新） |
 | `_DIR.md` / 头注释 | AI（写代码时同步） |
-| 业务代码 | AI（dispatch runner / Claude Code） |
+| 业务代码 | AI（dispatch runner / Claude Code / Codex） |
