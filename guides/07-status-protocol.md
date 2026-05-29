@@ -14,8 +14,8 @@ depends-on: []
 
 | 值 | 含义 | 谁设置 | 前置条件 |
 |---|---|---|---|
-| `draft` | Claude Code 正在编写四件套 | Claude Code | 创建 change 时 |
-| `ready` | 四件套齐全，等待 dispatch runner 领取 | Claude Code | pre-flight 通过 |
+| `draft` | 交互式 agent 正在编写四件套 | 交互式 agent（Claude Code / Codex） | 创建 change 时 |
+| `ready` | 四件套齐全，等待 dispatch runner 领取 | 交互式 agent（Claude Code / Codex） | pre-flight 通过 |
 | `executing` | dispatch 正在执行某个任务组 | change-dispatch | 领取第一个任务组时 |
 | `review` | 所有自动化任务组完成，等待审查 | change-dispatch | 所有自动化组 done |
 | `done` | 已通过 verify 并归档 | change-review | verify 三维度通过 |
@@ -42,14 +42,14 @@ depends-on: []                          # 无前置依赖
 ```markdown
 ## 共享基础设施
 
-<!-- 执行工具: Codex | 约束: 串行，必须先完成 | status: pending -->
+<!-- 执行模式: auto | 约束: 串行，必须先完成 | status: pending -->
 ```
 
 ### 字段说明
 
 | 字段 | 值 | 说明 |
 |------|---|------|
-| 执行工具 | `Codex` / `Claude Code` | 语义是「自动化 vs 交互式」。`Codex` = 任意 dispatch runner（Codex Automation / `/loop` / cron / GH Actions）领取；`Claude Code` = 交互式由 review 或人工承接。字面值保留向后兼容 |
+| 执行模式 | `auto` / `interactive` | `auto` = 任意 dispatch runner（Codex Automation / Claude Code `/loop` / cron / GH Actions）领取；`interactive` = 交互式由 review 或人工承接。旧 `执行工具: Codex` / `执行工具: Claude Code` 保留向后兼容 |
 | 约束 | 自由文本 | 如"串行"、"G0 完成后"、"与任务组 3 并行" |
 | status | `pending` / `executing` / `done` | 任务组级别状态 |
 
@@ -63,10 +63,10 @@ depends-on: []                          # 无前置依赖
 
 | 状态 | 含义 | 谁设置 |
 |------|------|--------|
-| `draft` | 正在撰写 | Claude Code (prd-writer) |
-| `reviewing` | 等待用户审阅 | Claude Code (prd-writer) |
+| `draft` | 正在撰写 | 交互式 agent（Claude Code / Codex，prd-writer） |
+| `reviewing` | 等待用户审阅 | 交互式 agent（Claude Code / Codex，prd-writer） |
 | `approved` | 用户已确认，可进入 propose | 用户 |
-| `superseded` | 已废弃（需求变更或取消） | 用户/Claude Code |
+| `superseded` | 已废弃（需求变更或取消） | 用户 / 交互式 agent |
 
 ### depends-on 字段（PRD）
 
@@ -111,7 +111,7 @@ change-id: ai-voice-entry
 ### Change 维度
 
 ```
-          Claude Code              dispatch             dispatch            review
+       交互式 agent              dispatch             dispatch            review
             编写中                 pre-flight             领取                全部完成              归档
               │                      │                    │                   │                   │
 draft ──────→ draft ──────────→ ready ──────────→ executing ──────────→ review ──────────→ done
@@ -162,7 +162,7 @@ T=1   用户说: "帮我分析 B-003 的需求"
 T=2   用户审阅 PRD: "approved"
       → PRD-003 status: approved
 T=3   用户说: "基于 B-003 开始规划"（或 change-propose 自动触发）
-      → Claude Code 读取 PRD-003 → 生成四件套
+      → 交互式 agent 读取 PRD-003 → 生成四件套
       → tasks.md status: draft → ready
       → backlog B-003: exploring → proposed
 T=4   dispatch runner 自动领取 G0
@@ -173,7 +173,7 @@ T=5   dispatch runner 并行领取 G1-A、G1-B
       → tasks.md status: ready → review
       （backlog B-003 仍保持 proposed，细粒度看 tasks.md status）
 T=6   用户触发 review
-      → Claude Code 审查 → 合并 → verify → 归档
+      → 交互式 agent 审查 → 合并 → verify → 归档
       → tasks.md status: review → done
       → backlog B-003: proposed → done
 ```

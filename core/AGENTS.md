@@ -101,7 +101,7 @@ Commit trailer 统一 `Backlog-Ref: B-NNN`；change 执行期额外带 `Change-I
 ### Git 关键规则
 
 - **dispatch 永远不碰 main** —— 只在 feature branch 工作
-- **Backlog 状态只由 Claude Code 在 main 上更新**
+- **Backlog 状态只由主控交互式 agent（Claude Code / Codex）在 main 上更新**
 - **PR = 四件套 + 代码** —— 审查者同时看到方案和实现
 - **Merge 策略：merge commit（`--no-ff`）** —— 保留完整历史
 - **push main 走 `core/git-safe-push.md` 协议**（3 轮 pull-rebase-push）

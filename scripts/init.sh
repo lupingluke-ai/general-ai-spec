@@ -362,7 +362,7 @@ write_file_if_missing "$PROJECT_DIR/.logs/_DIR.md" "# .logs/
 - \`prd/\` — prd-writer 阶段（按 PRD-NNN 一个文件）
 - \`propose/\` — change-propose 阶段（按 change-id 一个文件）
 - \`dispatch/\` — change-dispatch 执行阶段（任意 runner，按 change-id 一个文件）
-- \`review/\` — Claude Code review 阶段（按 change-id 一个文件）
+- \`review/\` — change-review 阶段（交互式 agent，按 change-id 一个文件）
 
 ## 日志级别
 
@@ -516,7 +516,7 @@ if $DRY_RUN; then
 else
   info "Project initialized successfully!"
   printf '\nGenerated files:\n'
-  printf '  • CLAUDE.md          — Claude Code entry point\n'
+  printf '  • CLAUDE.md          — Claude Code adapter entry point (AGENTS.md remains shared)\n'
   printf '  • AGENTS.md          — AI agent rules (core + %s prohibitions)\n' "$STACK_NAME"
   printf '  • openspec/project.md — Tech stack & architecture (%s)\n' "$STACK_NAME"
   printf '  • openspec/config.yaml — OpenSpec governance rules\n'

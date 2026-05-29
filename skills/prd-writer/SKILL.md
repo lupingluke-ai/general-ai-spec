@@ -1,6 +1,6 @@
 ---
 name: prd-writer
-description: Claude Code skill for generating Product Requirements Documents (PRDs). Takes a backlog entry (already tagged with a module) and produces a structured PRD through user dialogue, grounded in the module design document and referenced design inputs. Use when the user wants to explore, analyze, or define requirements for a backlog item.
+description: Interactive AI skill (Claude Code or Codex) for generating Product Requirements Documents (PRDs). Takes a backlog entry (already tagged with a module) and produces a structured PRD through user dialogue, grounded in the module design document and referenced design inputs. Use when the user wants to explore, analyze, or define requirements for a backlog item.
 ---
 
 # PRD Writer

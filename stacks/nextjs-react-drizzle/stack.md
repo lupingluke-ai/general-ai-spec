@@ -36,7 +36,7 @@
 ### Tooling
 - **Package Manager**: pnpm 10.x
 - **Spec System**: OpenSpec
-- **AI Coding Tools**: Claude Code（规划/审查）+ 任意 dispatch runner（Codex Automation / `/loop` / cron / GH Actions，runner-agnostic）
+- **AI Coding Tools**: 交互式 agent（Claude Code / Codex，用于规划/审查）+ 任意 dispatch runner（Codex Automation / Claude Code `/loop` / cron / GH Actions，runner-agnostic）
 
 ---
 

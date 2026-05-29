@@ -1,6 +1,6 @@
 ---
 name: change-review
-description: Claude Code skill for reviewing dispatch-completed changes. Uses branch-centric model where review happens via PR. Handles PR review, fractal documentation sync on branch, PR merge to main, three-dimension verify, delta specs sync, archiving, and backlog status update. Use when dispatch runner has completed task groups (status review) or when manually triggered.
+description: Interactive AI skill (Claude Code or Codex) for reviewing dispatch-completed changes. Uses branch-centric model where review happens via PR. Handles PR review, fractal documentation sync on branch, PR merge to main, three-dimension verify, delta specs sync, archiving, and backlog status update. Use when dispatch runner has completed task groups (status review) or when manually triggered.
 ---
 
 # Change Review & Archive
@@ -15,7 +15,7 @@ description: Claude Code skill for reviewing dispatch-completed changes. Uses br
 
 ## Bash 命令规范
 
-为避免 Claude Code 权限系统对复合命令的安全确认弹窗，所有 Bash 操作必须遵循：
+为兼容 Claude Code / Codex 等不同执行环境的权限与审批模型，所有 Bash 操作必须遵循：
 
 1. **每条命令独立调用** — 不在一条 Bash 中用 `&&`、`||`、`;` 串联多条命令
 2. **管道可以用** — 单条命令内的管道（如 `git branch -r | grep feat/`）是允许的
@@ -290,7 +290,7 @@ auto-merge 合并完成后（轮次 2 开始时）、Verify 前，执行以下�
 |---|--------|----------|---------|
 | R1 | PR 实际 diff 文件集 = design.md 完整文件清单 | `gh pr diff --name-only` 对比 design.md | 范围偏离 |
 | R2 | 没有 `[NEEDS-FIX]` 标记残留在代码中 | grep 代码库 `NEEDS-FIX` | 方案偏离 |
-| R3 | tasks.md 所有自动化任务组（`执行工具: Codex`）status 为 done | 解析 tasks.md HTML 注释 | 一致性偏离 |
+| R3 | tasks.md 所有自动化任务组（`执行模式: auto`，兼容旧 `执行工具: Codex`）status 为 done | 解析 tasks.md HTML 注释 | 一致性偏离 |
 | R4 | delta specs 每个 ADDED 场景有对应的新文件/新函数 | specs → 代码追溯 | 范围偏离 |
 
 **偏离处理：**
@@ -480,20 +480,20 @@ git push origin --delete <branch-prefix>/<change-id>
 ## 与其他 Skill 的关系
 
 ```
-module-designer (Claude Code)
+module-designer (interactive agent: Claude Code / Codex)
   → 设计：design-inputs → M-NNN module 文档 (status: planning) → 拆 B-NNN 到 backlog (阶段: idea)
 
-prd-writer (Claude Code)
+prd-writer (interactive agent: Claude Code / Codex)
   → 产品定义：backlog(idea, 模块=M-NNN) → PRD (status: reviewing → approved)
   → 首次激活：模块 status planning → active + backlog 阶段 idea → exploring
 
-change-propose (Claude Code)
+change-propose (interactive agent: Claude Code / Codex)
   → 技术规划：PRD approved → 四件套 on branch → Draft PR → backlog: proposed
 
-change-dispatch (any runner — Codex / `/loop` / cron / GH Actions)
+change-dispatch (any runner — Codex Automation / Claude Code `/loop` / cron / GH Actions)
   → 执行：scan backlog → fetch branch → implement → push → PR 自动更新 + CI 运行
 
-change-review (Claude Code)  ← 本 skill
+change-review (interactive agent: Claude Code / Codex)  ← 本 skill
   → 轮次 1：PR review → fractal sync → 本地 CI + 自动修复 → gh pr ready
   → (GitHub Actions auto-merge: 启用 --auto --merge → required checks 绿后 merge commit)
   → 轮次 2：verify on main → archive → backlog done
@@ -567,7 +567,7 @@ review 过程中遇到 STOP/WARN 级别时，**必须**追加记录到 `.logs/re
 
 ## 触发方式
 
-- **手动**：用户告诉 Claude Code "审查已完成的 change"
-- **定期**：通过 Claude Code `/loop` skill 定期扫描 `status: review`
-- **PR 事件**：dispatch push 后 CI 全绿，PR 自动更新，用户或 Claude Code 发现后触发
+- **手动**：用户告诉 Claude Code 或 Codex "审查已完成的 change"
+- **定期**：通过 Claude Code `/loop` 或其他定时 runner 定期扫描 `status: review`
+- **PR 事件**：dispatch push 后 CI 全绿，PR 自动更新，用户或交互式 agent 发现后触发
 - **通知**：dispatch runner 完成后（Codex Automation 会有 inbox 通知，其他 runner 见 `.logs/dispatch/` 日志），用户手动触发

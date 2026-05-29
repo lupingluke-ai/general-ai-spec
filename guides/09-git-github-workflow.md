@@ -14,7 +14,7 @@ main ─────────────────────────
   │  prd-writer                    │
   │                                │
   └── <branch-prefix>/<change-id> ──●──●──●──●──●──●──── (feature branch)
-       ↑ Claude Code                ↑ dispatch ↑ dispatch ↑ Claude Code
+       ↑ 交互式 agent              ↑ dispatch ↑ dispatch ↑ 交互式 agent
        创建 + 四件套               G0 push    G1 push    分形同步 push
 ```
 
@@ -34,7 +34,7 @@ main ─────────────────────────
 ```
 人工触发（需要人开口，共 2 次）           自动触发（无需人工介入）
 ─────────────────────────────────────    ──────────────────────────────────
-① 用户 → Claude Code:                    dispatch runner（每 5 分钟，任选其一）:
+① 用户 → 交互式 agent:                  dispatch runner（每 5 分钟，任选其一）:
      "帮我规划 B-003"                       扫描 backlog → fetch → 认领
        → 创建 branch + 四件套               → 实现代码 → push
        → Draft PR + 更新 main backlog
@@ -47,11 +47,11 @@ main ─────────────────────────
 
 | 操作 | 触发方式 | 执行者 |
 |------|----------|--------|
-| 建模块 + 拆 idea + 写 roadmap AUTO 段 | 🙋 人工（/design） | Claude Code (module-designer) |
-| 写 PRD + 更新 backlog/exploring | 🙋 人工（/prd B-NNN） | Claude Code (prd-writer) |
-| 创建 feature branch | 🙋 人工（用户告知 Claude Code） | Claude Code |
-| push 四件套 + 创建 Draft PR | 🙋 人工 | Claude Code |
-| 更新 main backlog (proposed) | 🙋 人工 | Claude Code |
+| 建模块 + 拆 idea + 写 roadmap AUTO 段 | 🙋 人工（/design） | 交互式 agent（Claude Code / Codex，module-designer） |
+| 写 PRD + 更新 backlog/exploring | 🙋 人工（/prd B-NNN） | 交互式 agent（Claude Code / Codex，prd-writer） |
+| 创建 feature branch | 🙋 人工（用户告知交互式 agent） | 交互式 agent |
+| push 四件套 + 创建 Draft PR | 🙋 人工 | 交互式 agent |
+| 更新 main backlog (proposed) | 🙋 人工 | 交互式 agent |
 | **认领任务组（claim executing）** | 🤖 自动（runner 每 5 分钟） | change-dispatch |
 | **实现代码 + push** | 🤖 自动 | change-dispatch |
 | Draft PR 内容更新 | 🤖 自动（push 触发） | GitHub |
@@ -67,7 +67,7 @@ main ─────────────────────────
 
 ### Stage 1 — 规划：创建 Branch + Draft PR
 
-**执行者：Claude Code** | **分支：main → `<branch-prefix>/<change-id>`**
+**执行者：交互式 agent（Claude Code / Codex）** | **分支：main → `<branch-prefix>/<change-id>`**
 
 ```bash
 # 1. 基于最新 main 创建 feature branch
@@ -132,7 +132,7 @@ git fetch origin feat/<change-id>
 
 # 3. 读取 tasks.md，选择任务组
 git show origin/feat/<change-id>:openspec/changes/<change-id>/tasks.md
-# → 找到所有满足前置条件的 pending 自动化任务组（`执行工具: Codex`）
+# → 找到所有满足前置条件的 pending 自动化任务组（`执行模式: auto`，兼容旧 `执行工具: Codex`）
 
 # 4. Checkout + 安装依赖
 git checkout feat/<change-id>
@@ -194,7 +194,7 @@ git checkout feat/<change-id> && git pull
 # 可自动修复的问题直接修复，不可修复的 STOP
 
 # ── 3. 分形文档同步（在 feature branch 上）──
-# 补充 _DIR.md、头注释，更新 tasks.md 中 Claude Code 任务组状态
+# 补充 _DIR.md、头注释，更新 tasks.md 中 interactive 任务组状态
 git add -A
 git commit -m "chore(<change-id>): fractal documentation sync
 
@@ -234,15 +234,15 @@ git branch -d feat/<change-id>
 
 ## 全生命周期 Git 操作一览
 
-> 🙋 = 人工触发（用户与 Claude Code 交互）　🤖 = 自动触发
+> 🙋 = 人工触发（用户与 Claude Code / Codex 交互）　🤖 = 自动触发
 
 ```
 时间线    触发  操作者          Git / GitHub 操作                  效果
 ──────────────────────────────────────────────────────────────────────────────
-T+0min   🙋   Claude Code     checkout -b feat/X                  —
-              Claude Code     commit 四件套 + push                 —
-              Claude Code     gh pr create --draft                 Draft PR 出现
-              Claude Code     checkout main + commit + push        backlog: proposed
+T+0min   🙋   interactive     checkout -b feat/X                  —
+              interactive     commit 四件套 + push                 —
+              interactive     gh pr create --draft                 Draft PR 出现
+              interactive     checkout main + commit + push        backlog: proposed
          🤖  GitHub CI        (push 触发)                          CI 首次运行
 ──────────────────────────────────────────────────────────────────────────────
 T+5min   🤖  change-dispatch   fetch + checkout + pull             —
@@ -271,7 +271,7 @@ T+40min  🤖  Coding Agent     检测 MERGED（轮次 2）               —
 ## 分支状态流转图
 
 ```
-                    Claude Code 创建
+                    交互式 agent 创建
                          │
                          ▼
 feat/<change-id>    [created] ──push──→ [remote + Draft PR]
@@ -316,13 +316,13 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 
 | 场景 | 原因 | 解决 |
 |------|------|------|
-| dispatch push 被拒 (non-fast-forward) | 并行任务组或 Claude Code 先 push 了 | `git pull --rebase` 后重试（feature branch） |
+| dispatch push 被拒 (non-fast-forward) | 并行任务组或交互式 agent 先 push 了 | `git pull --rebase` 后重试（feature branch） |
 | main push 被拒 (non-fast-forward) | 并发 push | 走 `core/git-safe-push.md`（3 轮 pull-rebase-push）；3 轮失败 STOP |
 | auto-merge 合并时冲突 | feature branch 基线滞后 / 治理层被误写 | `gh pr ready --undo` → Step 3.8 rebase origin/main（force-with-lease）→ 重新 `gh pr ready` |
-| CI 失败 | 代码问题 | dispatch 标记 `[NEEDS-FIX]`，Claude Code review 时修复 |
+| CI 失败 | 代码问题 | dispatch 标记 `[NEEDS-FIX]`，交互式 agent review 时修复 |
 | `gh pr merge` 失败 | PR 还是 Draft 状态 | 先 `gh pr ready <number>` |
 | worktree 锁定分支 | 上一轮 dispatch 未清理 worktree | `git worktree remove --force <path>` |
-| feature branch 不存在 | Claude Code 尚未 push | dispatch 跳过，等下一轮 |
+| feature branch 不存在 | 交互式 agent 尚未 push | dispatch 跳过，等下一轮 |
 | `pnpm install` 失败 | 网络或 registry 问题 | 重试，或检查 Network 配置 |
 
 ---
@@ -330,7 +330,7 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 ## 关键规则
 
 1. **dispatch 永远不碰 main** — 只在 feature branch 上 commit + push
-2. **Backlog 只由 Claude Code 在 main 上更新** — dispatch 不修改治理层
+2. **Backlog 只由交互式 agent（Claude Code / Codex）在 main 上更新** — dispatch 不修改治理层
 3. **Merge 策略固定为 merge commit** — `gh pr merge --auto --merge` 启用后由 GitHub 以 merge commit 合并（`--no-ff`）
 4. **一个 change 一个 branch** — 所有任务组（G0/G1-A/G1-B/G2）在同一个 `<branch-prefix>/<change-id>` 分支上（G 是任务组逻辑标签，不是分支名）
 5. **PR = 方案 + 代码** — Draft PR 从规划阶段就存在，贯穿整个生命周期

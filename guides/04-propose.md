@@ -1,6 +1,6 @@
 # 规划阶段：从 PRD 到四件套
 
-本阶段由 Claude Code 执行，使用 `change-propose` skill。
+本阶段由交互式 agent（Claude Code / Codex）执行，使用 `change-propose` skill。
 
 ## 前提
 
@@ -15,7 +15,7 @@
 你：/change-propose B-003
 ```
 
-Claude Code 收到后自动进入 change-propose 流程。
+交互式 agent 收到后自动进入 change-propose 流程。
 
 ### 自动触发
 
@@ -31,11 +31,11 @@ Claude Code 收到后自动进入 change-propose 流程。
 
 ### 0.1 定位
 
-Claude Code 读取 `product/backlog.md`，找到 B-003 条目。如果不存在，停止 propose，先通过 `/design` 或 `/design review M-NNN` 建立模块归属和 backlog 条目。
+交互式 agent 读取 `product/backlog.md`，找到 B-003 条目。如果不存在，停止 propose，先通过 `/design` 或 `/design review M-NNN` 建立模块归属和 backlog 条目。
 
 ### 0.2 检查 PRD
 
-Claude Code 读取 `product/prd/PRD-003.md`：
+交互式 agent 读取 `product/prd/PRD-003.md`：
 
 - **PRD approved** → 继续，后续 proposal 从 PRD 的用户故事和功能需求出发
 - **PRD 存在但未 approved** → 提示先审阅 PRD
@@ -45,7 +45,7 @@ Claude Code 读取 `product/prd/PRD-003.md`：
 
 ## Phase 1 — 生成四件套
 
-Claude Code 在 `openspec/changes/<change-id>/` 下创建：
+交互式 agent 在 `openspec/changes/<change-id>/` 下创建：
 
 ### proposal.md
 
@@ -111,7 +111,7 @@ depends-on: []
 ```markdown
 ## 共享基础设施
 
-<!-- 执行工具: Codex | 约束: 串行，必须先完成 | status: pending -->
+<!-- 执行模式: auto | 约束: 串行，必须先完成 | status: pending -->
 
 - [ ] 创建 AI 提取类型定义和 Zod schema
 - [ ] 创建分类匹配工具函数和单元测试
@@ -119,14 +119,14 @@ depends-on: []
 
 ## 语音入口组件
 
-<!-- 执行工具: Codex | 约束: G0 完成后 | status: pending -->
+<!-- 执行模式: auto | 约束: G0 完成后 | status: pending -->
 
 - [ ] 创建 Web Speech API Hook
 - [ ] 创建语音记账按钮组件和测试
 
 ## 文档与分形同步
 
-<!-- 执行工具: Claude Code | 约束: 全部合并完成后 | status: pending -->
+<!-- 执行模式: interactive | 约束: 全部合并完成后 | status: pending -->
 
 - [ ] 同步更新新增目录的 _DIR.md
 - [ ] 更新 openspec/project.md 目录结构
@@ -134,13 +134,13 @@ depends-on: []
 
 ## Verify
 
-<!-- 执行工具: Claude Code | 约束: 分形同步完成后 | status: pending -->
+<!-- 执行模式: interactive | 约束: 分形同步完成后 | status: pending -->
 
 - [ ] Completeness / Correctness / Coherence
 
 ## 归档
 
-<!-- 执行工具: Claude Code | 约束: verify 通过后 | status: pending -->
+<!-- 执行模式: interactive | 约束: verify 通过后 | status: pending -->
 
 - [ ] Sync delta specs → 归档 → 更新 backlog
 ```
@@ -154,7 +154,7 @@ depends-on: []
 
 ### Pre-flight 检查清单
 
-Claude Code 在标记 ready 前自动验证：
+交互式 agent 在标记 ready 前自动验证：
 
 - [ ] proposal.md 已落盘（含 Backlog Ref）
 - [ ] specs/ 已落盘（至少一个 delta spec 文件）

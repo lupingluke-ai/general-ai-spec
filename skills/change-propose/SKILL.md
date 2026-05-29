@@ -170,33 +170,33 @@ depends-on: [change-id-1, ...]
 # <change-id> Tasks
 
 ## G0 — <组名>
-<!-- 执行工具: Codex | 约束: 串行，必须先完成 | status: pending -->
+<!-- 执行模式: auto | 约束: 串行，必须先完成 | status: pending -->
 - [ ] ...
 
 ## G1-A — <组名>
-<!-- 执行工具: Codex | 约束: G0 完成后，与 G1-B 并行 | status: pending -->
+<!-- 执行模式: auto | 约束: G0 完成后，与 G1-B 并行 | status: pending -->
 - [ ] ...
 
 ## 文档与分形同步
-<!-- 执行工具: Claude Code | 约束: 自动化任务组全部完成后 | status: pending -->
+<!-- 执行模式: interactive | 约束: 自动化任务组全部完成后 | status: pending -->
 - [ ] 更新受影响的 _DIR.md
 - [ ] 验证新文件头注释
 - [ ] 全量验证: pnpm test, pnpm lint, pnpm build
 
 ## Verify
-<!-- 执行工具: Claude Code | 约束: 分形同步完成后 | status: pending -->
+<!-- 执行模式: interactive | 约束: 分形同步完成后 | status: pending -->
 - [ ] 三维度验证
 
 ## 归档
-<!-- 执行工具: Claude Code | 约束: Verify 完成后 | status: pending -->
+<!-- 执行模式: interactive | 约束: Verify 完成后 | status: pending -->
 - [ ] sync specs → archive → update backlog
 ```
 
-> **执行工具 tag 语义（runner-agnostic）：**
-> - `执行工具: Codex` = 需要 headless/自动化 runner 承接（实际 runner 可以是 Codex Automation、Claude Code `/loop`、cron、GitHub Actions 任选其一——dispatch skill 会按 tag 领取，不限定哪个 agent）
-> - `执行工具: Claude Code` = 需要人类在回路的交互式工作（由 change-review 或人工承接）
+> **执行模式 tag 语义（runner-agnostic）：**
+> - `执行模式: auto` = 需要 headless/自动化 runner 承接（实际 runner 可以是 Codex Automation、Claude Code `/loop`、cron、GitHub Actions 任选其一）
+> - `执行模式: interactive` = 需要人类在回路的交互式工作（Claude Code / Codex 均可，由 change-review 或人工承接）
 >
-> tag 字面值保留是为了向后兼容现有 tasks.md / 归档历史。未来可能迁移到 `执行模式: auto | interactive`。
+> dispatch 继续兼容旧 `执行工具: Codex` / `执行工具: Claude Code`，仅用于读取历史 tasks.md / 归档记录。
 
 dispatch runner 从三个来源获取实现上下文：tasks.md 描述 + design.md 方案 + 代码库。
 

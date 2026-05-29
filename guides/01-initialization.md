@@ -5,7 +5,7 @@
 - Node.js 18+
 - pnpm 已安装
 - Git 已初始化
-- Claude Code 已安装（用于规划和审查）
+- Claude Code 或 Codex 已安装（用于规划和审查）
 - 至少选择一种 dispatch runner（Codex Desktop / Claude Code `/loop` / cron / GitHub Actions / 手动），详见下文
 
 ## 初始化命令
@@ -25,7 +25,7 @@ bash scripts/init.sh --stack nextjs-react-local --dir /path/to/project --dry-run
 
 ```
 project/
-├── CLAUDE.md                  ← Claude Code 入口（指向 AGENTS.md 和 project.md）
+├── CLAUDE.md                  ← Claude Code adapter 入口（共享规则在 AGENTS.md）
 ├── AGENTS.md                  ← AI Agent 行为规范
 ├── product/
 │   ├── _DIR.md
