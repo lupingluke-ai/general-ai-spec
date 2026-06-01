@@ -5,12 +5,19 @@
 
 ## Rule Sources
 
-Runtime 规则源：`AGENTS.md`、`openspec/project.md`、`openspec/config.yaml`、`openspec/AGENTS.md`、`skills/*/SKILL.md`、`core/git-safe-push.md`、相关目录 `_DIR.md`。
+Runtime 规则源：
+- `AGENTS.md`：框架运行契约、阶段入口、Git 边界与硬禁令
+- `openspec/project.md`：当前项目技术栈、架构基线、目录职责与实现顺序
+- `openspec/config.yaml`：本框架叠加到 OpenSpec 之上的治理规则（backlog / PRD / change / verify / archive）
+- `openspec/AGENTS.md`：OpenSpec 官方规则入口，提供 proposal / delta spec / validate / archive 与管理块刷新规则
+- `skills/*/SKILL.md`：当前阶段的执行细则、STOP / WARN 条件与日志协议
+- `core/git-safe-push.md`：main 分支安全推送协议
+- 相关目录 `_DIR.md`：局部目录职责、输入输出与位置约束
 
-冲突优先级：硬边界 / Git 禁令 > 当前阶段 `SKILL.md` > `openspec/config.yaml` > `openspec/project.md` > 人类 `guides/`。
+冲突优先级：硬边界 / Git 禁令 > 当前阶段 `SKILL.md` > `openspec/config.yaml` > `openspec/AGENTS.md` > `openspec/project.md`。`guides/` 只作人工操作手册，不参与 runtime 优先级。
 
 <!-- OPENSPEC:START -->
-遇到 OpenSpec change / spec / proposal / archive 相关任务时，先读 `@/openspec/AGENTS.md`，用于遵守 OpenSpec 官方 delta、validate、archive 与管理块刷新规则。
+遇到 OpenSpec change / spec / proposal / archive 相关任务时，先读 `@/openspec/AGENTS.md`。本管理块只接入 OpenSpec 官方规则：delta spec 写法、proposal / validate / archive 生命周期，以及 `openspec update` 对管理块的刷新规则；主开发路径仍以本文件和 `skills/*/SKILL.md` 为准。
 <!-- OPENSPEC:END -->
 
 ## Operating Posture

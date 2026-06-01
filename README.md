@@ -71,7 +71,7 @@ general_ai_spec/
 | `module-designer/` | 交互式 agent（Claude Code / Codex） | 从 design inputs 建模块、划边界、拆分 backlog idea，并同步 roadmap |
 | `prd-writer/` | 交互式 agent（Claude Code / Codex） | 从 backlog 条目生成 PRD（产品需求文档），与用户对话澄清需求 |
 | `change-propose/` | 交互式 agent（Claude Code / Codex） | 基于 PRD 生成四件套（proposal + delta specs + design + tasks），支持并行任务拆分 |
-| `change-dispatch/` | 任意 runner（Codex Automation / `/loop` / cron / GH Actions） | 每 5 分钟自动扫描就绪任务，在 worktree 中隔离执行 |
+| `change-dispatch/` | 任意 runner（Codex Automation / `/loop` / cron / GH Actions） | 按项目配置的节奏扫描就绪任务，在 worktree 中隔离执行 |
 | `change-review/` | 交互式 agent（Claude Code / Codex） | 分支审查、顺序合并、verify 三维度验证、delta specs 同步、归档 |
 
 ## templates/ — 初始化模板
@@ -126,9 +126,9 @@ bash scripts/init.sh --dry-run       # 预览模式
 bash scripts/init.sh --stack nextjs-react-local --dir ./my-app
 
 # 2. 选一种 dispatch runner（任选其一，详见 skills/change-dispatch/SKILL.md）
-#    A: 在 Claude Code 中运行 `/loop 5m /change-dispatch`（零配置，推荐开发期）
-#    B: Codex Desktop 配置 Automation（Name: change-dispatch | Schedule: 5min | Worktree: yes）
-#    C: cron：*/5 * * * * cd /path/to/repo && claude -p "/change-dispatch"
+#    A: 在 Claude Code 中运行 `/loop <interval> /change-dispatch`（零配置，推荐开发期）
+#    B: Codex Desktop 配置 Automation（Name: change-dispatch | Schedule: <interval> | Worktree: yes）
+#    C: cron：<cron> cd /path/to/repo && claude -p "/change-dispatch"
 #    D: GitHub Actions 定时 workflow
 
 # 3. 录入原始想法并拆成 backlog

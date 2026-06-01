@@ -173,7 +173,7 @@ else
   printf '\nClaude Code can now:\n'
   printf '  • Read CLAUDE.md as its entry point\n'
   printf '  • Use /design /prd /change-propose /change-review (main path) via .claude/skills/\n'
-  printf '  • Fall back to OpenSpec /opsx: commands via .claude/commands/opsx/ if needed\n'
+  printf '  • Read openspec/AGENTS.md for OpenSpec proposal/spec/validate/archive rules\n'
   printf '  • Access all project skills via .claude/skills/\n'
   printf '  • Use git worktrees safely (.worktrees in .gitignore)\n'
   printf '  • Drive the design layer via design/inputs/ → /design → design/modules/\n'

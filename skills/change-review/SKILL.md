@@ -504,7 +504,7 @@ change-review (interactive agent: Claude Code / Codex)  ← 本 skill
 - 每个 change-id 必须由 `change-propose` 产出，其 backlog 行"模块"列必须为 `M-NNN`（历史遗留为 `—` 时跳过模块同步）
 - `design/modules/<M-NNN>-*.md` 必须存在（由 `module-designer` 落盘）；缺失则 STOP
 
-**下游触发：** 本 skill 归档后状态流稳定，无自动下游；Luke 可通过 `/loop 15m /change-review` 定期扫描。
+**下游触发：** 本 skill 归档后状态流稳定，无自动下游；可人工触发，或由配置好的 runner 定期扫描。
 
 ## 问题日志
 

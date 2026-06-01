@@ -53,21 +53,21 @@ git fetch origin && git branch -r | grep feat/ && gh pr list --state open
 
 ## Runner 配置（任选其一）
 
-dispatch 对 runner 的要求**只有三项**：git 读写、shell 执行、网络访问。推荐频率：开发期 5 分钟，上线后 10-15 分钟。
+dispatch 对 runner 的要求**只有三项**：git 读写、shell 执行、网络访问。触发频率由项目自行配置，需保证不会长期占用分支或压垮 CI。
 
 ### 方式 A — Claude Code `/loop`（推荐开发期）
 
 ```
-/loop 5m /change-dispatch
+/loop <interval> /change-dispatch
 ```
 
-优点：零配置；启动/停止方便；与 `/loop 15m /change-propose` + `/loop 10m /change-review` 三线并行协作自然。
+优点：零配置；启动/停止方便；可与 `change-propose` / `change-review` 的人工或定时触发协作。
 
 ### 方式 B — Codex Desktop Automation（推荐 24/7 无人值守）
 
 ```
 Name:     change-dispatch
-Schedule: every 5 minutes
+Schedule: <interval>
 Worktree: yes (加速并行任务组隔离)
 Network:  allow github.com, allow registry.npmjs.org
 Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
@@ -78,13 +78,13 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 ### 方式 C — cron（服务器部署）
 
 ```cron
-*/5 * * * * cd /path/to/repo && claude --dangerously-skip-permissions -p "/change-dispatch" >> .logs/dispatch/cron.log 2>&1
+<cron> cd /path/to/repo && claude --dangerously-skip-permissions -p "/change-dispatch" >> .logs/dispatch/cron.log 2>&1
 ```
 
 或用 Codex CLI：
 
 ```cron
-*/5 * * * * cd /path/to/repo && codex exec "/change-dispatch" >> .logs/dispatch/cron.log 2>&1
+<cron> cd /path/to/repo && codex exec "/change-dispatch" >> .logs/dispatch/cron.log 2>&1
 ```
 
 优点：轻量；服务器 24/7；不依赖桌面客户端。
@@ -95,7 +95,7 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 # .github/workflows/dispatch.yml
 name: change-dispatch
 on:
-  schedule: [{cron: '*/5 * * * *'}]
+  schedule: [{cron: '<cron>'}]
   workflow_dispatch: {}
 jobs:
   dispatch:

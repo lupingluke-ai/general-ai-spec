@@ -285,4 +285,4 @@ git pull origin main
 - ❌ 不在 feature branch 操作（PRD 是产品文档，落 main）
 - ❌ 不碰 AUTO:PROGRESS 非 idea/exploring 阶段的行
 - ❌ 不覆盖 module 文档的人工段（只动 frontmatter、`## 关联 Backlog`、`## 修订历史`）
-- ❌ 不自动触发 `/change-propose`（Luke approve 后由 `/loop 15m /change-propose` 自动接手）
+- ❌ 不自动触发 `/change-propose`（PRD approved 后由人工或配置好的 runner 接手）

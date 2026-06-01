@@ -533,10 +533,10 @@ else
   printf '  3. Drop raw inspiration into design/inputs/ (brainstorming/figma/interviews)\n'
   printf '  4. Start the pipeline: /design  (module-designer builds M-NNN + decomposes into backlog)\n'
   printf '  5. Continue: /prd B-NNN → /change-propose (after PRD approved) → dispatch runner → /change-review\n'
-  printf '\nPick a dispatch runner (required to drive change-dispatch automatically):\n'
-  printf '  A. Claude Code /loop (dev-time, zero config):   /loop 5m /change-dispatch\n'
-  printf '  B. Codex Desktop Automation (24/7):             Name: change-dispatch | Schedule: 5min | Worktree: yes\n'
-  printf '  C. cron:                                        */5 * * * * cd %s && claude -p "/change-dispatch" >> .logs/dispatch/cron.log 2>&1\n' "$PROJECT_DIR"
+  printf '\nPick a dispatch runner and configure its cadence for your project:\n'
+  printf '  A. Claude Code /loop (dev-time, zero config):   /loop <interval> /change-dispatch\n'
+  printf '  B. Codex Desktop Automation (24/7):             Name: change-dispatch | Schedule: <interval> | Worktree: yes\n'
+  printf '  C. cron:                                        <cron> cd %s && claude -p "/change-dispatch" >> .logs/dispatch/cron.log 2>&1\n' "$PROJECT_DIR"
   printf '  D. GitHub Actions:                              schedule workflow calling `claude -p "/change-dispatch"` or `codex exec`\n'
   printf '  E. One-shot manual:                             /change-dispatch\n'
   printf '  See skills/change-dispatch/SKILL.md for full runner recipes.\n'
