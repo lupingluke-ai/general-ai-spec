@@ -1,6 +1,6 @@
 ---
 name: change-propose
-description: Propose an OpenSpec change — scan backlog or accept a specific B-NNN, check PRD readiness and dependencies, generate four-piece set (proposal/specs/design/tasks) on feature branch, create Draft PR, and update main indexes. Works both as one-shot (`/change-propose B-045`) and scheduled (`/loop 15m /change-propose`).
+description: Propose an OpenSpec change — scan backlog or accept a specific B-NNN, check PRD readiness and dependencies, generate four-piece set (proposal/specs/design/tasks) on feature branch, create Draft PR, and update main indexes. Works both as one-shot (`/change-propose B-045`) and scheduled by a runner.
 ---
 
 # Change Propose
@@ -416,4 +416,4 @@ change-review → 审查 + 归档 → backlog: done + module: done（最后一�
 
 - `/change-propose` — 扫描 backlog，propose 下一个就绪条目
 - `/change-propose B-NNN` — 直接 propose 指定条目
-- `/loop 15m /change-propose` — 定时自动扫描
+- runner 定时触发 `/change-propose` — 自动扫描
