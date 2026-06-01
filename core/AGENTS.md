@@ -9,16 +9,14 @@ Runtime 规则源：
 - `AGENTS.md`：框架运行契约、阶段入口、Git 边界与硬禁令
 - `openspec/project.md`：当前项目技术栈、架构基线、目录职责与实现顺序
 - `openspec/config.yaml`：本框架叠加到 OpenSpec 之上的治理规则（backlog / PRD / change / verify / archive）
-- `openspec/AGENTS.md`：OpenSpec 官方规则入口，提供 proposal / delta spec / validate / archive 与管理块刷新规则
+- OpenSpec 官方 skills / commands：由 `openspec init` 安装到当前 agent 目录（如 `.codex/skills/openspec-*`、`.claude/skills/openspec-*`），提供 proposal / delta spec / validate / archive 的底层规则
 - `skills/*/SKILL.md`：当前阶段的执行细则、STOP / WARN 条件与日志协议
 - `core/git-safe-push.md`：main 分支安全推送协议
 - 相关目录 `_DIR.md`：局部目录职责、输入输出与位置约束
 
-冲突优先级：硬边界 / Git 禁令 > 当前阶段 `SKILL.md` > `openspec/config.yaml` > `openspec/AGENTS.md` > `openspec/project.md`。`guides/` 只作人工操作手册，不参与 runtime 优先级。
+冲突优先级：硬边界 / Git 禁令 > 当前阶段 `SKILL.md` > `openspec/config.yaml` > OpenSpec 官方 skills / commands > `openspec/project.md`。`guides/` 只作人工操作手册，不参与 runtime 优先级。
 
-<!-- OPENSPEC:START -->
-遇到 OpenSpec change / spec / proposal / archive 相关任务时，先读 `@/openspec/AGENTS.md`。本管理块只接入 OpenSpec 官方规则：delta spec 写法、proposal / validate / archive 生命周期，以及 `openspec update` 对管理块的刷新规则；主开发路径仍以本文件和 `skills/*/SKILL.md` 为准。
-<!-- OPENSPEC:END -->
+遇到 OpenSpec change / spec / proposal / archive 相关任务时，使用当前 agent 已安装的 OpenSpec 官方 skills / commands（如 `openspec-propose`、`openspec-apply-change`、`openspec-archive-change`）并读取 `openspec/config.yaml`。这里只接入 OpenSpec 官方 proposal、delta spec、validate、archive 规则；主开发路径仍以本文件和 `skills/*/SKILL.md` 为准。
 
 ## Operating Posture
 
@@ -68,7 +66,7 @@ PRD approved 后，`change-propose`、dispatch runner 与 `change-review` 可按
 ## Artifact Contract
 
 - **任务类型与命名**：feature / bug / chore / hotfix 走同一流程；branch、commit、PR title、PRD 模板与 trailer 以 `openspec/config.yaml` 的 `task-types` 为准。
-- **Change 四件套**：每个 change 必须包含 `proposal.md` + `specs/` delta + `design.md` + `tasks.md` + `_DIR.md`；delta 语义见 `openspec/AGENTS.md`。
+- **Change 四件套**：每个 change 必须包含 `proposal.md` + `specs/` delta + `design.md` + `tasks.md` + `_DIR.md`；delta 语义遵循 OpenSpec 官方 skills / commands。
 - **分形文档同步**：创建或修改文件时同步维护文件头、所在目录 `_DIR.md`；新建目录必须有 `_DIR.md`；顶层结构变化更新 `openspec/project.md`。
 - **日志协议**：自动化 skill 遇到 STOP / WARN 必须写 `.logs/<skill>/<artifact-id>.md`；scope 与格式以各 `SKILL.md` 和 `.logs/_DIR.md` 为准。
 

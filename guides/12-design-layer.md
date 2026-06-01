@@ -139,7 +139,7 @@ module-designer 落盘：
 
 历史 backlog（无"模块"列或标记为 `—`）不强制回填模块。自动化 skill 对这些行：
 
-- `prd-writer`：Step 2.2 module-ref 必填校验时提示 Luke 补齐，否则拒绝生成 PRD
+- `prd-writer`：Step 2.2 module-ref 必填校验时提示用户补齐，否则拒绝生成 PRD
 - `change-propose`：Phase 0 筛选时跳过并写日志
 - `change-review`：Step 6.3.2 跳过模块/roadmap 同步
 - `module-designer`：`/design review M-NNN` 时可以把历史条目追加到"## 关联 Backlog"，完成手工补录
@@ -233,7 +233,7 @@ module-designer 落盘：
 - `/brainstorming` 是上游：产出原始灵感写到 `design/inputs/brainstorming/`
 - `/design` 是下游：消费 inputs/ 素材，产出模块 + backlog
 
-可以先 `/brainstorming` 再 `/design`，也可以直接 `/design`（module-designer 会提示 Luke 是否需要先录入灵感）。
+可以先 `/brainstorming` 再 `/design`，也可以直接 `/design`（module-designer 会提示用户是否需要先录入灵感）。
 
 ---
 

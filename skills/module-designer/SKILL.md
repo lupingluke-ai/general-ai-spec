@@ -7,7 +7,7 @@ description: Interactive AI skill (Claude Code or Codex) for designing product m
 
 ## Overview
 
-把"模块设计"和"idea 拆分"合并到一次对话里完成。读设计输入（brainstorming / figma / 访谈）→ 与 Luke 对话收敛模块边界 → 自动拆分为 N 条 backlog idea（每条自动建议 type）→ 生成 module 文档 + 写入 backlog → 实时同步 roadmap。
+把"模块设计"和"idea 拆分"合并到一次对话里完成。读设计输入（brainstorming / figma / 访谈）→ 与用户在对话收敛模块边界 → 自动拆分为 N 条 backlog idea（每条自动建议 type）→ 生成 module 文档 + 写入 backlog → 实时同步 roadmap。
 
 **职责边界：** 只负责 L0→L1→L2 的设计层工作。PRD 生成由 `prd-writer`，技术规划由 `change-propose`，执行/审查由 `change-dispatch` / `change-review`。
 
@@ -52,7 +52,7 @@ git pull origin main
 - 保证读到最新的 backlog 和 roadmap
 - 保证不在过时基线上设计
 
-**失败处理：** 冲突时提示 Luke 先解决再继续。
+**失败处理：** 冲突时提示用户先解决再继续。
 
 ---
 
@@ -96,12 +96,12 @@ grep -oE 'B-[0-9]+' product/backlog.md | sort -Vu | tail -1
    - `brainstorming/` — 最新的相关灵感笔记
    - `figma/` — 原型链接与交互说明
    - `interviews/` — 用户访谈
-   - 由 Luke 在对话中指明要引用哪些，或自动取最新 7 天内与主题相关的
+   - 由用户在对话中指明要引用哪些，或自动取最新 7 天内与主题相关的
 4. `product/backlog.md` — 已有 backlog（避免重复；增量模式下读已关联条目）
 5. `openspec/specs/*.md` — 已有 specs（避免需求已被覆盖）
 
 **降级策略：**
-- `design/inputs/` 空 → 对话时主动追问 Luke "是否已经做过头脑风暴？内容在哪？" 补录到 `inputs/brainstorming/<date>-<topic>.md` 后继续
+- `design/inputs/` 空 → 对话时主动追问 用户 "是否已经做过头脑风暴？内容在哪？" 补录到 `inputs/brainstorming/<date>-<topic>.md` 后继续
 - `design/roadmap.md` 不存在 → 从 `templates/roadmap.md.tmpl` 复制一份后继续（首次使用场景）
 
 ---
@@ -112,7 +112,7 @@ grep -oE 'B-[0-9]+' product/backlog.md | sort -Vu | tail -1
 
 ### 3.1 模块设计收敛
 
-向 Luke 提问/确认：
+向用户提问/确认：
 
 1. **模块定位**：解决什么问题、服务什么场景
 2. **模块边界**：承担 / 不承担（明确 out of scope 避免蔓延）
@@ -124,7 +124,7 @@ grep -oE 'B-[0-9]+' product/backlog.md | sort -Vu | tail -1
 ### 3.2 idea 拆分（结构化评估）
 
 **硬拆信号（必须拆）：**
-- 跨越多个模块 → 当前 skill 内只能处理本模块范围；跨模块部分提示 Luke 另开 `/design`
+- 跨越多个模块 → 当前 skill 内只能处理本模块范围；跨模块部分提示用户另开 `/design`
 - 预估 FR（功能需求）> 8 条
 - 包含多个独立用户价值（每个都能独立上线）
 - 有明确的依赖序（先做 A 才能做 B）
@@ -141,7 +141,7 @@ grep -oE 'B-[0-9]+' product/backlog.md | sort -Vu | tail -1
 
 ### 3.3 type 自动建议规则
 
-按以下启发式为每条拆出的 idea 建议 type，Luke 对话中确认：
+按以下启发式为每条拆出的 idea 建议 type，用户在对话中确认：
 
 | 信号 | 建议 type |
 |---|---|
@@ -150,11 +150,11 @@ grep -oE 'B-[0-9]+' product/backlog.md | sort -Vu | tail -1
 | 重构 / 升级依赖 / 构建配置 / 文档 | `chore` |
 | P0/P1 线上紧急 | `hotfix` |
 
-**默认 `feature`**；Luke 明确反对时切换。
+**默认 `feature`**；用户明确反对时切换。
 
 ### 3.4 对话终态
 
-对话最终输出（Luke 一次性确认）：
+对话最终输出（用户一次性确认）：
 
 ```
 M-NNN <模块名> (status: planning)
@@ -165,10 +165,10 @@ M-NNN <模块名> (status: planning)
     ...
 ```
 
-Luke 确认后进入 Phase 4。中途发现需要调整的，循环回 3.1 / 3.2。
+用户确认后进入 Phase 4。中途发现需要调整的，循环回 3.1 / 3.2。
 
 **禁止做的事：**
-- 禁止跳过 Luke 直接落盘
+- 禁止跳过用户直接落盘
 - 禁止一次对话处理多个模块（跨模块必须另开 `/design`）
 - 禁止在 `review` 模式下删除已归档的 backlog
 
@@ -182,7 +182,8 @@ Luke 确认后进入 Phase 4。中途发现需要调整的，循环回 3.1 / 3.2
 
 从 `templates/module.md.tmpl` 派生：
 - frontmatter：`id` / `slug` / `status` / `depends-on` / `design-inputs`（至少引用 Phase 2 实际读取的 inputs）
-- `## 关联 Backlog` 小节：按 B-NNN 顺序列出本 /design 拆出的所有 idea
+- `## 关联 Backlog` 小节：按 B-NNN 顺序列出本 /design 拆出的所有 idea，并保留 backlog 级依赖
+  - 格式：`- B-NNN <需求描述> [idea] [depends-on: B-XXX, B-YYY | none]`
 - `## 拆分理由`：简要记录对话关键考虑（为什么拆成这 N 条、依赖关系为何如此）
 - `## 修订历史`：首行写 `YYYY-MM-DD | 首次创建 | module-designer`
 
@@ -204,7 +205,7 @@ Luke 确认后进入 Phase 4。中途发现需要调整的，循环回 3.1 / 3.2
 | B-NNN | <需求描述> | M-NNN | <type> | idea | — | — | <备注，空> |
 ```
 
-- `depends-on` 关系**不进 backlog 表**；落在本次拆出的 idea 之间的依赖由 PRD 的 `depends-on` 字段在 prd-writer 阶段写入。本 skill 的对话结果里，`depends-on` 先记录到 `## 关联 Backlog` 注释里，prd-writer 读取时再消费。
+- backlog 级 `depends-on` 关系**不进 backlog 表**；落在本次拆出的 idea 之间或指向既有 backlog 的依赖，由 PRD 的 `depends-on` 字段在 prd-writer 阶段写入。本 skill 必须先记录到 module 文档 `## 关联 Backlog` 行尾的 `[depends-on: ...]` 中，prd-writer 读取时再消费。
 
 ### 4.3 历史兼容
 
@@ -279,11 +280,12 @@ Phase 5 完成后、Commit 前，**必须**执行以下交叉验证。
 | P4 | 每条新建 idea 至少可追溯到一个 `design-inputs` 路径 | 对比 Phase 2 读到的输入 | 范围偏离 |
 | P5 | `## 关联 Backlog` 的 B-NNN 列表 = `product/backlog.md` 中该模块下本次新增的 B-NNN 集合 | 两处集合对比 | 一致性偏离 |
 | P6 | AUTO:PROGRESS 段中本次新增 B-NNN / 当前 M-NNN 的 idea 行 = backlog 中对应行 | 仅对本次新增 B-NNN 集合或当前模块 M-NNN 做两处集合比对，不全局扫描其他模块 idea | 一致性偏离 |
+| P7 | 每条新建 idea 的 `depends-on` 对话结果已写入 module `## 关联 Backlog` 行尾 | 对比 Phase 3.4 确认结果与 module 行尾 `[depends-on: ...]` | 一致性偏离 |
 
 **偏离处理：**
-- **硬偏离**（P3 环依赖）→ 停止写入，回 Phase 3 让 Luke 调整依赖后重跑
-- **软偏离**（P1/P2/P5/P6 数值不一致）→ 写日志 → 自动对齐
-- **范围偏离**（P4 找不到 inputs 追溯）→ 写日志 + 在 `## 修订历史` 注明"缺 inputs 追溯"+ 继续（不阻塞，Luke 可补录 inputs）
+- **硬偏离**（P3 环依赖）→ 停止写入，回 Phase 3 让用户调整依赖后重跑
+- **软偏离**（P1/P2/P5/P6/P7 数值不一致）→ 写日志 → 自动对齐
+- **范围偏离**（P4 找不到 inputs 追溯）→ 写日志 + 在 `## 修订历史` 注明"缺 inputs 追溯"+ 继续（不阻塞，用户可补录 inputs）
 
 ---
 
@@ -316,7 +318,7 @@ git push origin main
 #   - product/backlog.md 新增行冲突（多 skill 同时落 idea）→ 按 B-NNN 升序合并
 #   - design/roadmap.md AUTO:ARCHITECTURE / DEPENDENCIES / PROGRESS → 按 M-NNN / B-NNN 主键合并
 #   - design/modules/*.md 同模块并发编辑 → frontmatter status 取新、关联 Backlog / 修订历史按主键合并
-#   - 模块边界 / 技术选型段冲突 → STOP + 日志（需 Luke 确认设计意图）
+#   - 模块边界 / 技术选型段冲突 → STOP + 日志（需用户确认设计意图）
 # 3 轮仍失败 → STOP，写日志到 .logs/module-designer/M-NNN.md
 ```
 
@@ -324,7 +326,7 @@ git push origin main
 
 ---
 
-## 输出给 Luke
+## 输出给 用户
 
 完成后输出一段简报：
 
@@ -342,8 +344,8 @@ git push origin main
 
 | 失败场景 | 恢复策略 |
 |---|---|
-| Phase 0 git pull 冲突 | 提示 Luke 先 merge/rebase |
-| Phase 3 Luke 未确认即中断 | 不写任何文件，下次重跑 |
+| Phase 0 git pull 冲突 | 提示用户先 merge/rebase |
+| Phase 3 用户未确认即中断 | 不写任何文件，下次重跑 |
 | Phase 4 写 backlog 后写 roadmap 失败 | 已写的 backlog 保留；下次 `/design review M-NNN` 会补齐 roadmap |
 | Phase 5 AUTO 段标记缺失 | 检测不到边界时用 `templates/roadmap.md.tmpl` 的标记原样注入（保持幂等） |
 | Phase 6 push 被拒（远程有新 commit）| 走 `core/git-safe-push.md`（3 轮 pull-rebase-push + 分段冲突策略）；3 轮失败 STOP 写 `.logs/module-designer/M-NNN.md` |
@@ -364,8 +366,8 @@ git push origin main
 
 - ❌ 不生成 PRD（那是 prd-writer 的职责）
 - ❌ 不生成四件套（那是 change-propose 的职责）
-- ❌ 不跨模块拆分 idea（遇到跨模块时提示 Luke 另开 /design）
+- ❌ 不跨模块拆分 idea（遇到跨模块时提示用户另开 /design）
 - ❌ 不在 feature branch 操作（设计层一律落 main）
 - ❌ 不删除已 done 的 backlog 行
 - ❌ 不覆盖 roadmap 的人工段（只动 AUTO:* 段）
-- ❌ 不自动触发 /prd（Luke 读完简报后手动发起）
+- ❌ 不自动触发 /prd（用户读完简报后手动发起）

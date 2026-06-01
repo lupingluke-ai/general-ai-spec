@@ -113,7 +113,7 @@ PRD approved 后，告诉 Claude Code 或 Codex：
 
 ### 5. 自动执行
 
-无需手动操作。dispatch runner（Codex Automation / `/loop 5m /change-dispatch` / cron / GH Actions 任选其一）每 5 分钟自动扫描：
+无需手动操作。dispatch runner（Codex Automation / `/loop <interval> /change-dispatch` / cron / GH Actions 任选其一）按配置间隔自动扫描：
 
 ```
 change-dispatch 自动领取 → worktree 执行 → 完成后标记 review

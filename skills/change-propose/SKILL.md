@@ -37,11 +37,11 @@ design-inputs:                    # 必填；至少包含模块文档路径
 ---
 ```
 
-缺少 `type`、`depends-on`、`change-id`、`module-ref` 或 `design-inputs` 的 PRD 会被跳过。`design-inputs` 必须包含一条指向 `design/modules/<M-NNN>-*.md` 的路径，否则视为缺失。
+自动扫描时，缺少 `type`、`depends-on`、`change-id`、`module-ref` 或 `design-inputs` 的 PRD 会被跳过；显式 `/change-propose B-NNN` 命中这些问题时 STOP 并写日志。`design-inputs` 必须包含一条指向 `design/modules/<M-NNN>-*.md` 的路径，否则视为缺失。
 
-## 类型 → 分支/提交前缀派生规则（单一事实源）
+## 类型 → 分支/提交前缀派生规则
 
-**不读 backlog 也不读 PRD frontmatter**，直接从 `change-id` 字符串前缀派生（零 I/O）。判定按**严格顺序**：
+backlog / PRD 的 `type` 是声明事实源；`change-id` 前缀用于校验声明是否一致，并在通过校验后派生 branch / commit / PR 前缀。判定按**严格顺序**：
 
 | 判定顺序 | change-id 前缀匹配 | type | branch 前缀 | commit type | PR 标题前缀 |
 |---------|-------------------|------|------------|-------------|------------|
@@ -50,7 +50,7 @@ design-inputs:                    # 必填；至少包含模块文档路径
 | 3 | `startsWith("fix-")`（严格 4 字符，排除 `fixture-*`） | bug | `fix/` | `fix` | `fix` |
 | 4 | 其余 | feature | `feat/` | `feat` | `feat` |
 
-派生结果在 Phase 0/1/2 全程复用，禁止重新计算或硬编码 `feat/`。**4 种类型走完全相同的执行路径**，前缀差异仅用于语义标签（git log / release notes 过滤）。
+Phase 0 必须验证 backlog type、PRD type、change-id 派生 type 三者一致。验证通过后，派生结果在 Phase 1/2 全程复用，禁止重新计算或硬编码 `feat/`。**4 种类型走完全相同的执行路径**，前缀差异仅用于语义标签（git log / release notes 过滤）。
 
 ---
 
@@ -69,8 +69,9 @@ design-inputs:                    # 必填；至少包含模块文档路径
 3. PRD `status: approved`
 4. PRD 有 `type`、`change-id`、`depends-on`、`module-ref`、`design-inputs` 字段
 5. `design-inputs` 至少包含一条指向 `design/modules/<module-ref>-*.md` 的路径，且该文件存在
-6. `depends-on` 中所有依赖条目阶段为 `done`
-7. `<branch-prefix>/<change-id>` 远程分支不存在，或远程分支已存在但 backlog 仍停留在 `exploring`（发布恢复模式）
+6. backlog type、PRD type、change-id 派生 type 三者一致
+7. `depends-on` 中所有依赖条目阶段为 `done`
+8. `<branch-prefix>/<change-id>` 远程分支不存在，或远程分支已存在但 backlog 仍停留在 `exploring`（发布恢复模式）
 
 候选排序：无依赖优先 → backlog ID 小优先。每次最多 propose **1 个**。
 
@@ -223,7 +224,7 @@ Phase 1 完成后、Phase 2 pre-flight 前，**必须**执行以下交叉验证�
 **偏离处理：**
 - **硬偏离**（P1 含 Out of Scope 功能、P2 引用错误、P7 Module Ref 不一致）→ 写日志 → 自动修正后重新检查
 - **软偏离**（P4/P5 数值差异）→ 写日志 → 自动对齐两处清单
-- **范围偏离**（P1 / P3 / P7 Scope 越界）→ 写 STOP 日志 → 跳过该 change → 提示 Luke 走 `/design review M-NNN` 扩边界 或 重写 PRD 把越界需求拆到新 backlog
+- **范围偏离**（P1 / P3 / P7 Scope 越界）→ 写 STOP 日志 → 跳过该 change → 提示用户走 `/design review M-NNN` 扩边界 或 重写 PRD 把越界需求拆到新 backlog
 - 所有偏离修正后再进入 Phase 2
 
 ---
@@ -357,14 +358,14 @@ git push origin main
 
 | 条件 | 原因 |
 |------|------|
-| PRD 缺 `type` / `change-id` / `depends-on` / `module-ref` / `design-inputs` | 需人工补充（prd-writer 或 /design review）|
+| PRD 缺 `type` / `change-id` / `depends-on` / `module-ref` / `design-inputs` | 自动扫描 SKIP；显式 B-NNN STOP，需人工补充（prd-writer 或 /design review）|
 | PRD `design-inputs` 不含模块文档路径或路径不存在 | 模块文档失联，需人工修复 |
 | PRD `module-ref` 指向的 `design/modules/<M-NNN>-*.md` 不存在 | 模块被删或未落盘 |
 | PRD status ≠ approved | 需求未批准 |
 | 依赖条目未 done | 前置未完成，等待下一轮扫描；显式 `/change-propose B-NNN` 时只提示等待，不写 STOP |
 | `<branch-prefix>/<change-id>` 已存在且 backlog 已为 `proposed` / `done` | 已 proposed / 已归档 |
 | backlog 阶段已为 proposed/done | 已处理 |
-| change-id 前缀与 PRD type 不一致 | 前缀派生与声明矛盾（如 type=feature 但 change-id 以 `fix-` 开头） |
+| backlog type、PRD type、change-id 派生 type 不一致 | 类型声明与命名派生矛盾（如 type=feature 但 change-id 以 `fix-` 开头） |
 
 ## 问题日志
 
@@ -382,10 +383,10 @@ git push origin main
 
 | 场景 | 触发条件 |
 |------|---------|
-| PRD 缺字段 | `type` / `change-id` / `depends-on` / `module-ref` / `design-inputs` 缺失 |
+| PRD 缺字段 | 显式 `/change-propose B-NNN` 时，`type` / `change-id` / `depends-on` / `module-ref` / `design-inputs` 缺失 |
 | 模块文档缺失 | `design/modules/<M-NNN>-*.md` 不存在 |
 | Scope 越界 | proposal.md Scope 超出模块"承担"边界（P7 硬偏离）|
-| type 与前缀不一致 | PRD `type` 字段与 change-id 派生 type 冲突 |
+| type 与前缀不一致 | backlog type、PRD `type` 字段与 change-id 派生 type 冲突 |
 | Git 操作失败 | checkout/commit/push 任一失败 |
 | PR 创建失败 | `gh pr create` 失败 |
 | Pre-flight 失败 | 6 项检查任一不通过 |

@@ -16,7 +16,7 @@ context: |
 
 task-types:
   # 4 种任务类型的命名与治理规则
-  # 所有 skill 从 change-id 前缀推导 branch-prefix（零 I/O 字符串判断）
+  # backlog/PRD 的 type 是声明事实源；change-id 前缀用于校验并派生 branch-prefix
   # 粒度拆分由 module-designer 在 /design 阶段与用户对话确定，propose 不再二次检查
   feature:
     change-id-prefix: ""              # 无前缀
@@ -64,7 +64,7 @@ rules:
     - PRD 回答 what & why，proposal 回答 how，职责分离
     - type=feature 使用 Full PRD（templates/prd.md.tmpl）：含用户故事、Must Have / Nice to Have / Out of Scope、验收标准
     - type=bug/chore/hotfix 使用 Lite PRD（templates/prd-lite.md.tmpl）：保留 Must Have（最少 1 条）和 AC（≥ delta specs 场景数）
-    - PRD 必须用户 approved 后才能进入 propose
+    - PRD 必须由用户确认 approved 后才能进入 propose
     - PRD 不随 change 归档，长期保留在 product/prd/
     - PRD frontmatter 必须包含 type 字段（feature | bug | chore | hotfix）
 

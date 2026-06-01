@@ -16,9 +16,12 @@
 #   6. 创建 product/ 目录（backlog.md + _DIR.md）
 #   7. 创建 design/ 目录（roadmap.md + inputs/ + modules/，module-designer 消费）
 #   8. 创建 .logs/ 目录（执行日志基础设施）
-#   9. 运行 stacks/<name>/scaffold.sh（安装依赖、创建 .env.local 等）
-#  10. 初始化 OpenSpec
-#  11. 安装 skills
+#   9. 创建 GitHub workflow（auto-merge）
+#  10. 配置 .gitignore
+#  11. 运行 stacks/<name>/scaffold.sh（安装依赖、创建 .env.local 等）
+#  12. 初始化 OpenSpec
+#  13. 安装 skills
+#  14. 安装可选扩展 skills
 
 set -euo pipefail
 
@@ -99,6 +102,7 @@ info()  { printf '\n[INFO]  %s\n' "$*"; }
 ok()    { printf '[OK]    %s\n' "$*"; }
 skip()  { printf '[SKIP]  %s\n' "$*"; }
 would() { printf '[WOULD] %s\n' "$*"; }
+fail()  { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
 run_cmd() {
   if $DRY_RUN; then would "$*"; else eval "$*"; fi
@@ -405,7 +409,29 @@ PRD 缺字段 / 依赖字段异常 / 范围越界 / 设计偏离 / Pre-flight �
 - 一次性网络超时不记录，反复出现时记录
 - 每个 change-id 一个文件，追加写入"
 
-# ─── 9. .gitignore — add .worktrees ──────────────────────────
+# ─── 9. GitHub workflow scaffolding ───────────────────────────
+info "Creating GitHub workflow scaffolding ..."
+
+AUTO_MERGE_CONTENT=$(cat "$FRAMEWORK_DIR/templates/github-workflows/auto-merge.yml")
+write_file_if_missing "$PROJECT_DIR/.github/workflows/auto-merge.yml" "$AUTO_MERGE_CONTENT"
+
+write_file_if_missing "$PROJECT_DIR/.github/_DIR.md" "# .github/_DIR.md
+
+GitHub automation configuration directory.
+
+## 子目录
+
+- \`workflows/\` — GitHub Actions workflows used by the delivery pipeline."
+
+write_file_if_missing "$PROJECT_DIR/.github/workflows/_DIR.md" "# .github/workflows/_DIR.md
+
+GitHub Actions workflow directory.
+
+## 文件
+
+- \`auto-merge.yml\` — Enables merge-commit auto-merge when change-review marks a Draft PR as Ready."
+
+# ─── 10. .gitignore — add .worktrees ──────────────────────────
 info "Checking .gitignore ..."
 
 GITIGNORE="$PROJECT_DIR/.gitignore"
@@ -416,7 +442,7 @@ else
   $DRY_RUN || ok ".worktrees added to .gitignore"
 fi
 
-# ─── 10. Run stack scaffold.sh ──────────────────────────────
+# ─── 11. Run stack scaffold.sh ──────────────────────────────
 SCAFFOLD="$STACK_DIR/scaffold.sh"
 if [ -f "$SCAFFOLD" ]; then
   info "Running stack scaffold ($STACK_NAME) ..."
@@ -429,7 +455,7 @@ else
   skip "No scaffold.sh found for $STACK_NAME"
 fi
 
-# ─── 11. Initialize OpenSpec ────────────────────────────────
+# ─── 12. Initialize OpenSpec ────────────────────────────────
 info "Initializing OpenSpec ..."
 
 OPENSPEC_PKG="${OPENSPEC_PKG:-@fission-ai/openspec@1.2.0}"
@@ -438,19 +464,24 @@ if $DRY_RUN; then
   would "Initialize OpenSpec with $OPENSPEC_PKG"
 else
   cd "$PROJECT_DIR"
-  # Codex integration
-  if command -v pnpm >/dev/null 2>&1; then
-    pnpm dlx "$OPENSPEC_PKG" init --tools codex --force 2>/dev/null || true
-    ok "OpenSpec initialized for Codex"
+  if ! command -v pnpm >/dev/null 2>&1; then
+    fail "pnpm is required to initialize OpenSpec. Install pnpm and rerun init.sh."
   fi
-  # Claude Code integration
-  if command -v pnpm >/dev/null 2>&1; then
-    pnpm dlx "$OPENSPEC_PKG" init --tools claude --force 2>/dev/null || true
-    ok "OpenSpec initialized for Claude Code"
+
+  pnpm dlx "$OPENSPEC_PKG" init --tools codex --force
+  if [ ! -f "$PROJECT_DIR/.codex/skills/openspec-propose/SKILL.md" ]; then
+    fail "OpenSpec Codex init completed but .codex/skills/openspec-propose/SKILL.md is missing."
   fi
+  ok "OpenSpec initialized for Codex"
+
+  pnpm dlx "$OPENSPEC_PKG" init --tools claude --force
+  if [ ! -f "$PROJECT_DIR/.claude/skills/openspec-propose/SKILL.md" ]; then
+    fail "OpenSpec Claude init completed but .claude/skills/openspec-propose/SKILL.md is missing."
+  fi
+  ok "OpenSpec initialized for Claude Code"
 fi
 
-# ─── 12. Install skills ─────────────────────────────────────
+# ─── 13. Install skills ─────────────────────────────────────
 info "Installing skills ..."
 
 FRAMEWORK_SKILLS="$FRAMEWORK_DIR/skills"
@@ -484,7 +515,7 @@ else
   skip "No skills directory found at $FRAMEWORK_SKILLS"
 fi
 
-# ─── 13. Optional extras (弱耦合外部 skills) ─────────────────
+# ─── 14. Optional extras (弱耦合外部 skills) ─────────────────
 # 失败仅 WARN，不阻塞初始化。详见 guides/10-extras.md
 install_extra_skill() {
   local label="$1"
@@ -524,6 +555,7 @@ else
   printf '  • design/roadmap.md  — Global roadmap (architecture/dependencies/progress AUTO-synced)\n'
   printf '  • design/inputs/     — L0 raw design inputs (brainstorming/figma/interviews)\n'
   printf '  • design/modules/    — L1 module designs (maintained by module-designer)\n'
+  printf '  • .github/workflows/auto-merge.yml — Required auto-merge handoff for change-review\n'
   printf '  • .logs/             — Execution logs (module-designer/prd/propose/dispatch/review)\n'
   printf '  • src/_DIR.md        — Fractal doc root\n'
   printf '  • .env.local         — Environment variables\n'

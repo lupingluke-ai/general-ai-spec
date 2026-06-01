@@ -21,9 +21,9 @@ description: Interactive AI skill (Claude Code or Codex) for reviewing dispatch-
 2. **管道可以用** — 单条命令内的管道（如 `git branch -r | grep feat/`）是允许的
 3. **并行无依赖时分开调用** — 多条独立命令应作为多个并行 Bash tool call 发送
 
-## 类型 → 分支前缀派生规则（单一事实源）
+## 类型 → 分支前缀派生规则
 
-从 `change-id` 字符串前缀派生（零 I/O，全流程复用）：
+`change-propose` 已经校验 backlog type、PRD type、change-id 派生 type 三者一致。review 阶段用 change-id 前缀派生 branch / commit 前缀：
 
 | 判定顺序 | change-id 前缀 | type | branch 前缀 | commit type |
 |---------|---------------|------|------------|-------------|
@@ -95,7 +95,7 @@ review skill 与 auto-merge 协作，一个 change 可能跨多轮完成。每�
 | PR 状态 | CI 状态 | tasks.md status | 本轮行为 |
 |---------|---------|-----------------|---------|
 | Draft | — | review | **轮次 1**：Step 2 审查 → Step 3 分形同步 → Step 3.5 本地 CI → Step 4 `gh pr ready` |
-| Open (Ready) | 绿/pending | review | **跳过**：等 auto-merge 合并 |
+| Open (Ready) | 绿/pending | review | **确保 auto-merge 已启用**；然后等待 GitHub 合并 |
 | Open (Ready) | 红 | review | **回退**：`gh pr ready --undo` → 尝试修复 → push → 下一轮重走轮次 1 |
 | MERGED | — | review | **轮次 2**：Step 5 verify → Step 6 archive |
 | MERGED | — | done | **跳过**：已完成 |
@@ -236,7 +236,7 @@ git push --force-with-lease origin <branch-prefix>/<change-id>
 说明 main 期间有其他 change 修改了本 change 计划新建的同一文件——这通常意味着 change 设计阶段的"文件独占性"假设被破坏。
 
 - 写日志（STOP 级别）
-- 提示 Luke：两个 change 的 design.md 有范围重叠，需人工裁决（其一放弃 / 重新 propose / 接受合并）
+- 提示用户：两个 change 的 design.md 有范围重叠，需人工裁决（其一放弃 / 重新 propose / 接受合并）
 - PR 保持 Draft，中止本次 review
 
 ### 情况 C：有冲突，落在治理层文件
@@ -244,7 +244,7 @@ git push --force-with-lease origin <branch-prefix>/<change-id>
 说明 dispatch 或之前的 review 步骤违反了"feature branch 治理层禁改清单"（见 `core/AGENTS.md`）。
 
 - 写日志（STOP 级别，类型："治理层禁改清单违反"）
-- 提示 Luke + 中止
+- 提示用户并中止
 - 恢复手段：需要从 feature branch 的 git log 找到违规 commit 并 `git revert` 或 `git reset` 后重新 push（非自动化范畴）
 
 ### force-push 后
@@ -265,10 +265,12 @@ git push --force-with-lease origin <branch-prefix>/<change-id>
 gh pr ready <pr-number>
 ```
 
-**不再直接 merge。** 合并由 GitHub Actions `auto-merge.yml` 负责：
+**不直接手工合并。** 合并优先由初始化生成的 GitHub Actions `auto-merge.yml` 负责：
 1. `auto-merge.yml` 检测到 `ready_for_review` 事件
 2. 执行 `gh pr merge --auto --merge`
 3. 由 GitHub 在 required checks 通过后执行 merge commit（保留完整提交历史）
+
+兜底：若仓库缺少 `.github/workflows/auto-merge.yml` 或 workflow 未触发，本 skill 必须执行一次 `gh pr merge <pr-number> --auto --merge` 来启用 GitHub auto-merge；若 GitHub 仓库未开启 auto-merge，则 STOP 并写日志，提示先开启仓库 auto-merge 或由 maintainer 明确执行 merge。
 
 **本轮 review 到此结束。** verify + archive 在下一轮处理。
 

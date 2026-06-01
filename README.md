@@ -86,13 +86,13 @@ init.sh 使用的文件模板，用于生成新项目的基础文件。
 | `backlog.md.tmpl` | `product/backlog.md`（产品需求 Backlog） |
 | `prd.md.tmpl` | `product/prd/PRD-NNN.md`（Full PRD，feature 类型用） |
 | `prd-lite.md.tmpl` | `product/prd/PRD-NNN.md`（Lite PRD，bug / chore / hotfix 类型用） |
-| `github-workflows/auto-merge.yml` | `.github/workflows/auto-merge.yml`（非 Draft PR 启用 merge commit auto-merge） |
+| `github-workflows/auto-merge.yml` | `.github/workflows/auto-merge.yml`（change-review 转 Ready 后启用 merge commit auto-merge） |
 
 ## scripts/ — 自动化脚本
 
 | 脚本 | 职责 |
 |------|------|
-| `init.sh` | 一键初始化新项目：生成 AGENTS.md、project.md、config.yaml、CLAUDE.md 适配入口、backlog、分形文档骨架、`.logs/` 执行日志目录，安装 Skills |
+| `init.sh` | 一键初始化新项目：生成 AGENTS.md、project.md、config.yaml、CLAUDE.md 适配入口、backlog、分形文档骨架、auto-merge workflow、`.logs/` 执行日志目录，安装 Skills |
 
 ```bash
 # 使用示例

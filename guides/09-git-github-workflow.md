@@ -25,7 +25,7 @@ main ─────────────────────────
 - `prd-writer` 产出 `docs(PRD-NNN): ...` 直接落 main（PRD 是产品文档）
 - 两者不开 feature branch，也不走 PR（没有代码变更）
 
-> 分支前缀由 change-id 字符串前缀零 I/O 派生：feature→`feat/`、bug→`fix/`、chore→`chore/`、hotfix→`hotfix/`。下文示例以 feature 为主（`feat/<change-id>`），其他类型把 `feat/` 替换为对应前缀即可。详见 [11-task-types.md](./11-task-types.md)。
+> `change-propose` 校验 backlog / PRD type 与 change-id 派生 type 一致后，分支前缀由 change-id 字符串前缀派生：feature→`feat/`、bug→`fix/`、chore→`chore/`、hotfix→`hotfix/`。下文示例以 feature 为主（`feat/<change-id>`），其他类型把 `feat/` 替换为对应前缀即可。详见 [11-task-types.md](./11-task-types.md)。
 
 ---
 
@@ -34,7 +34,7 @@ main ─────────────────────────
 ```
 人工触发（需要人开口，共 2 次）           自动触发（无需人工介入）
 ─────────────────────────────────────    ──────────────────────────────────
-① 用户 → 交互式 agent:                  dispatch runner（每 5 分钟，任选其一）:
+① 用户 → 交互式 agent:                  dispatch runner（按配置间隔，任选其一）:
      "帮我规划 B-003"                       扫描 backlog → fetch → 认领
        → 创建 branch + 四件套               → 实现代码 → push
        → Draft PR + 更新 main backlog
@@ -52,7 +52,7 @@ main ─────────────────────────
 | 创建 feature branch | 🙋 人工（用户告知交互式 agent） | 交互式 agent |
 | push 四件套 + 创建 Draft PR | 🙋 人工 | 交互式 agent |
 | 更新 main backlog (proposed) | 🙋 人工 | 交互式 agent |
-| **认领任务组（claim executing）** | 🤖 自动（runner 每 5 分钟） | change-dispatch |
+| **认领任务组（claim executing）** | 🤖 自动（runner 按配置间隔） | change-dispatch |
 | **实现代码 + push** | 🤖 自动 | change-dispatch |
 | Draft PR 内容更新 | 🤖 自动（push 触发） | GitHub |
 | CI 运行（test/lint/build） | 🤖 自动（push 触发） | GitHub Actions |
@@ -245,7 +245,7 @@ T+0min   🙋   interactive     checkout -b feat/X                  —
               interactive     checkout main + commit + push        backlog: proposed
          🤖  GitHub CI        (push 触发)                          CI 首次运行
 ──────────────────────────────────────────────────────────────────────────────
-T+5min   🤖  change-dispatch   fetch + checkout + pull             —
+T+interval 🤖 change-dispatch  fetch + checkout + pull             —
               change-dispatch   claim: executing → commit + push    PR 更新（lock）
               change-dispatch   pnpm install                        —
               change-dispatch   实现 G0/G1-A/G1-B → commit × N     —
@@ -299,7 +299,7 @@ dispatch 可被任何 runner 触发，选一种即可。完整清单见 `skills/
 **Codex Desktop Automation**（24/7 无人值守）
 ```
 Name:     change-dispatch
-Schedule: every 5 minutes
+Schedule: <interval>
 Worktree: yes
 Network:  allow github.com, allow registry.npmjs.org
 Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
@@ -307,7 +307,7 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 
 **Claude Code `/loop`**（开发期零配置）
 ```
-/loop 5m /change-dispatch
+/loop <interval> /change-dispatch
 ```
 
 ---
@@ -398,4 +398,4 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 - `Change-ID: <change-id>` — change 层 commit 必含
 - `PRD-Status` / `Backlog-Stage` — 状态跃迁类 commit 额外记录
 
-> `<type>` 从 change-id 前缀派生：`feat`（默认）/ `fix`（hotfix-/fix-）/ `chore`（chore-），与 PR title / branch 前缀保持一致。
+> `<type>` 在 `change-propose` 完成一致性校验后从 change-id 前缀派生：`feat`（默认）/ `fix`（hotfix-/fix-）/ `chore`（chore-），与 PR title / branch 前缀保持一致。

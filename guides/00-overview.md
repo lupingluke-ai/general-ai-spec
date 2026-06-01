@@ -38,14 +38,14 @@ prd-writer                      ← 交互式 agent（Claude Code / Codex，/prd
 用户审阅 PRD                     ← 人工确认 → PRD status: approved
   │
   ▼
-change-propose                 ← 交互式 agent（Claude Code / Codex，人工触发 / 定期 /loop 15m 自动）
+change-propose                 ← 交互式 agent（Claude Code / Codex，人工触发 / runner 定期触发）
   │  Phase 0: 读 backlog + 读 PRD（必须 approved，粒度已在 /design 阶段确定）
   │  Phase 1: 基于 PRD 生成四件套（proposal + delta specs + design + tasks）
   │  Phase 2: 依赖分析 → 编写 tasks.md → pre-flight → 标记 ready
   │  → 创建 feature branch + Draft PR → backlog 阶段: proposed
   │
   ▼
-change-dispatch                ← dispatch runner（Codex Automation / `/loop` / cron / GH Actions，每 5 分钟自动）
+change-dispatch                ← dispatch runner（Codex Automation / `/loop` / cron / GH Actions，按配置间隔自动）
   │  扫描 backlog → fetch branch → 领取任务组 → worktree 执行 → push → tasks.md status: review
   │  → Draft PR 自动更新 → CI 自动运行
   │  （backlog 阶段保持 proposed——dispatch 不碰 main；细粒度看 tasks.md status）
@@ -137,9 +137,9 @@ openspec/changes/<change-id>/
 | 模块设计 + idea 拆分 | 交互式 agent（Claude Code / Codex，module-designer） | `/design` / `/design review M-NNN` |
 | 产品定义 | 交互式 agent（Claude Code / Codex，prd-writer） | `/prd B-NNN` |
 | PRD 审阅 | 人工 | 用户确认 approved |
-| 技术规划 | 交互式 agent（Claude Code / Codex，change-propose） | 人工触发 / `/loop 15m` 定期自动 |
-| 代码执行 | change-dispatch (任意 runner：Codex Automation / `/loop` / cron / GH Actions) | 每 5 分钟自动 |
-| 审查归档 | 交互式 agent（Claude Code / Codex，change-review） | 人工触发 / `/loop 10m` 定期 |
+| 技术规划 | 交互式 agent（Claude Code / Codex，change-propose） | 人工触发 / runner 定期触发 |
+| 代码执行 | change-dispatch (任意 runner：Codex Automation / `/loop` / cron / GH Actions) | 按配置间隔自动 |
+| 审查归档 | 交互式 agent（Claude Code / Codex，change-review） | 人工触发 / runner 定期触发 |
 
 ## 指南目录
 

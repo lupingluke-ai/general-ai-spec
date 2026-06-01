@@ -29,7 +29,7 @@ description: Interactive AI skill (Claude Code or Codex) for generating Product 
 
 单次运行产出（全部落 `main` 分支）：
 
-1. `product/prd/PRD-NNN.md`（新建，首次 `status: reviewing`；Luke approved 后改为 `approved`）
+1. `product/prd/PRD-NNN.md`（新建，首次 `status: reviewing`；用户确认 approved 后改为 `approved`）
 2. `product/backlog.md`（目标 B-NNN 阶段 idea → exploring，PRD 列写入 PRD-NNN）
 3. `design/modules/M-NNN-*.md`（`## 关联 Backlog` 小节更新该行阶段；`status: planning → active` 当且仅当本 skill 首次将该模块的任一 backlog 推进到 exploring）
 4. `design/roadmap.md` 的 `AUTO:ARCHITECTURE` 段（若 module status 变化）+ `AUTO:PROGRESS` 段（目标行 💡 → 🔎）
@@ -48,7 +48,7 @@ git pull origin main
 - PRD-NNN 编号分配不冲突
 - 不在过时基线上做产品决策
 
-**失败处理：** 冲突时提示 Luke 先解决再继续。
+**失败处理：** 冲突时提示用户先解决再继续。
 
 ---
 
@@ -66,8 +66,8 @@ git pull origin main
 
 若"模块"列为 `—` 或空：
 
-- **历史遗留 backlog**（启用本框架前创建的）→ 提示 Luke 给这条 backlog 补模块归属：要么手工改 backlog 该列，要么通过 `/design review M-NNN` 把它追加到模块的 `## 关联 Backlog`
-- **新条目漏填** → 提示 Luke 回 `/design` 重新落盘（通常说明 module-designer 流程被绕过）
+- **历史遗留 backlog**（启用本框架前创建的）→ 提示用户给这条 backlog 补模块归属：要么手工改 backlog 该列，要么通过 `/design review M-NNN` 把它追加到模块的 `## 关联 Backlog`
+- **新条目漏填** → 提示用户回 `/design` 重新落盘（通常说明 module-designer 流程被绕过）
 
 补齐前**不生成 PRD**。
 
@@ -76,7 +76,7 @@ git pull origin main
 | 路径 | 用途 |
 |---|---|
 | `design/modules/<M-NNN>-*.md` | **必读** — 模块边界、对外接口、技术选型。PRD 范围必须落在模块边界内 |
-| `design/modules/<M-NNN>-*.md` 的 `## 关联 Backlog` 小节 | **必读** — 本 B-NNN 的 `depends-on` 注释（module-designer 在对话中记录的依赖关系） |
+| `design/modules/<M-NNN>-*.md` 的 `## 关联 Backlog` 小节 | **必读** — 本 B-NNN 行尾的 `[depends-on: ...]`（module-designer 在对话中记录的 backlog 级依赖） |
 | `design/inputs/**` | 必读 — module 文档 `design-inputs` 字段列出的所有路径 |
 | `openspec/project.md` | 必读 — 技术栈约束 |
 | `openspec/specs/` | 扫描 — 已有系统行为，避免需求冲突 |
@@ -99,17 +99,17 @@ git pull origin main
 
 ## Step 3 — 对话澄清（边界受模块约束）
 
-与 Luke 对话，澄清：
+与用户在对话，澄清：
 
 - **feature**：用户故事 / Must Have / Nice to Have / Out of Scope
 - **bug / hotfix**：现象 / 根因 / 预期行为 / 回归场景
 - **chore**：动机 / 目标状态 / 影响面
 
 **约束**：对话推导的需求不得越出 module 文档的"承担"边界；越界时有两种处理：
-1. **小幅调整** → 主动提示 Luke"要不要扩展 M-NNN 的边界？"，调整后先走 `/design review M-NNN` 再回本 skill
-2. **大幅越界** → 拒绝对话，提示 Luke"这条需求本质上属于另一个模块，建议拆到新 backlog 并挂到对应模块"
+1. **小幅调整** → 主动提示用户"要不要扩展 M-NNN 的边界？"，调整后先走 `/design review M-NNN` 再回本 skill
+2. **大幅越界** → 拒绝对话，提示用户"这条需求本质上属于另一个模块，建议拆到新 backlog 并挂到对应模块"
 
-`depends-on` 字段：优先采用 module-designer 在 `## 关联 Backlog` 记录的依赖；Luke 若在对话中提及新的前置依赖（跨模块 backlog），追加到 PRD frontmatter 的 `depends-on` 列表。
+`depends-on` 字段：优先采用 module-designer 在 `## 关联 Backlog` 行尾记录的 `[depends-on: ...]`；用户若在对话中提及新的前置依赖（跨模块 backlog），追加到 PRD frontmatter 的 `depends-on` 列表。
 
 ---
 
@@ -179,11 +179,12 @@ Step 6 完成后、Commit 前，**必须**执行以下交叉验证。
 | P4 | PRD type 与 backlog type 一致 | 字符串比对 | 硬偏离 |
 | P5 | module 文档 `## 关联 Backlog` 中该 B-NNN 行阶段 = exploring | 行级比对 | 一致性偏离 |
 | P6 | roadmap AUTO:PROGRESS 中该 B-NNN 行图标 = 🔎 | 行级比对 | 一致性偏离 |
+| P7 | PRD `depends-on` = module `## 关联 Backlog` 行尾 `[depends-on: ...]` + 本轮对话新增依赖 | 集合比对 | 一致性偏离 |
 
 **偏离处理：**
 - **硬偏离**（P1/P2/P4 字段不一致）→ 写日志 → 自动修正（以 backlog 为准）
-- **范围偏离**（P3 越界）→ 写日志 → 回 Step 3 让 Luke 决策（扩边界 / 拒绝 / 改挂模块）
-- **一致性偏离**（P5/P6 同步未落盘）→ 写日志 → 自动补齐
+- **范围偏离**（P3 越界）→ 写日志 → 回 Step 3 让用户决策（扩边界 / 拒绝 / 改挂模块）
+- **一致性偏离**（P5/P6/P7 同步未落盘）→ 写日志 → 自动补齐
 
 ---
 
@@ -223,7 +224,7 @@ git push origin main
 
 ---
 
-## Step 8 — 等待 Luke 审阅与 Approved
+## Step 8 — 等待用户审阅与 Approved
 
 输出简报：
 
@@ -236,7 +237,7 @@ git push origin main
    - 请审阅；确认后说 "approved" 我改状态
 ```
 
-### Luke 确认 approved 时：
+### 用户确认 approved 时：
 
 ```bash
 git checkout main
@@ -253,7 +254,7 @@ git pull origin main
 
 - **需求变化但 change 未开始** → 直接改 PRD 内容，保持 `approved`
 - **需求变化且 change 已执行中** → 旧 PRD 标 `superseded`，新开 B-NNN（新 PRD），走新流程
-- **Luke 否决** → 改 `status: draft`，回 Step 3 重新对话
+- **用户否决** → 改 `status: draft`，回 Step 3 重新对话
 
 ---
 
@@ -261,7 +262,7 @@ git pull origin main
 
 | 失败场景 | 恢复策略 |
 |---|---|
-| Step 2.2 "模块"列缺失 | 拒绝生成 PRD；提示 Luke 走 `/design` 或 `/design review` 补齐 |
+| Step 2.2 "模块"列缺失 | 拒绝生成 PRD；提示用户走 `/design` 或 `/design review` 补齐 |
 | Step 3 对话越界 | 按 Step 3 的两档处理（小调 / 大越界） |
 | Step 6.1 module 文档并发写入冲突 | `git pull --rebase` 后重试；P5 复盘兜底 |
 | Step 7 push 被拒 | 走 `core/git-safe-push.md`（3 轮 pull-rebase-push），3 轮失败 STOP 写日志 |
@@ -272,7 +273,7 @@ git pull origin main
 
 | Skill | 交接方向 | 交接物 |
 |---|---|---|
-| `module-designer` | 上游 → 本 skill | backlog "模块"列、module 文档 `## 关联 Backlog` 的 depends-on 注释 |
+| `module-designer` | 上游 → 本 skill | backlog "模块"列、module 文档 `## 关联 Backlog` 的 `[depends-on: ...]` |
 | `change-propose` | 本 skill → 下游 | PRD `approved` + frontmatter 六字段齐全（id / type / backlog-ref / module-ref / status / change-id / design-inputs）|
 | `change-review` | 本 skill → 下游（间接） | module `status: active` + roadmap AUTO:PROGRESS 图标 |
 

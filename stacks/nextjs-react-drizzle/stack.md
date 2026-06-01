@@ -119,6 +119,7 @@ pnpm -v                    # pnpm 10.x
 pnpm install               # 依赖安装成功
 pnpm lint                  # Linting 通过
 pnpm build                 # 构建成功
+pnpm test                  # 单元测试通过
 pnpm dev                   # 开发服务器启动
 docker ps                  # PostgreSQL 容器运行中（如果用 Docker）
 ```

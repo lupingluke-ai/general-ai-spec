@@ -30,7 +30,7 @@ PRD 解决的问题：避免 AI 在写技术方案时同时做产品决策。先
 - "模块"列已填 `M-NNN`
 - 归属的 `design/modules/M-NNN-*.md` 文件存在
 
-若"模块"列为 `—` 或模块文档缺失，`prd-writer` 会拒绝生成 PRD 并提示 Luke：
+若"模块"列为 `—` 或模块文档缺失，`prd-writer` 会拒绝生成 PRD 并提示用户：
 - 历史遗留 backlog → `/design review M-NNN` 追加到具体模块
 - 新条目漏填 → 回到 `/design` 重新走 module-designer 流程
 
@@ -40,7 +40,7 @@ PRD 解决的问题：避免 AI 在写技术方案时同时做产品决策。先
 
 交互式 agent 读取 `product/backlog.md` 找到 B-NNN，然后按以下顺序必读上下文：
 
-- `design/modules/M-NNN-*.md` — 模块边界、对外接口、`## 关联 Backlog` 中该行的 depends-on 注释
+- `design/modules/M-NNN-*.md` — 模块边界、对外接口、`## 关联 Backlog` 中该行尾部的 `[depends-on: ...]`
 - `design/inputs/**` — module 文档 `design-inputs` 字段列出的所有路径
 - `openspec/project.md` — 技术栈约束
 - `openspec/specs/` — 已有系统行为，避免需求冲突
@@ -200,7 +200,7 @@ bug / chore / hotfix 类型自动使用 Lite PRD 模板（`templates/prd-lite.md
 ## 注意事项
 
 - PRD 是产品文档，不包含技术实现细节
-- PRD 必须用户 approved 才能进入 propose（AI 不代替人做产品决策）
+- PRD 必须用户确认 approved 才能进入 propose（AI 不代替人做产品决策）
 - **PRD 与 change 严格 1:1 绑定**（PRD frontmatter 的 `change-id` 是单值字段）。需要切分工作量时请回到 `/design`，由 `module-designer` 在 backlog 层拆成多条 B-NNN，每条 backlog 各自 1 PRD → 1 change
 - **PRD 不跨模块**（`module-ref` 是单值字段）。跨模块需求必须先在 `/design` 拆分
 - PRD 不随 change 归档，长期保留在 `product/prd/` 中

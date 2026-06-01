@@ -15,14 +15,14 @@
 ### 方式 A — Claude Code `/loop`（推荐开发期）
 
 ```
-/loop 5m /change-dispatch
+/loop <interval> /change-dispatch
 ```
 
 ### 方式 B — Codex Desktop Automation（推荐 24/7 无人值守）
 
 ```
 Name:     change-dispatch
-Schedule: every 5 minutes
+Schedule: <interval>
 Worktree: yes (隔离执行)
 Network:  allow github.com, allow registry.npmjs.org
 Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
@@ -31,14 +31,14 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 ### 方式 C — cron
 
 ```cron
-*/5 * * * * cd /path/to/repo && claude --dangerously-skip-permissions -p "/change-dispatch" >> .logs/dispatch/cron.log 2>&1
+<cron> cd /path/to/repo && claude --dangerously-skip-permissions -p "/change-dispatch" >> .logs/dispatch/cron.log 2>&1
 # 或使用 Codex CLI：
-# */5 * * * * cd /path/to/repo && codex exec "/change-dispatch" >> .logs/dispatch/cron.log 2>&1
+# <cron> cd /path/to/repo && codex exec "/change-dispatch" >> .logs/dispatch/cron.log 2>&1
 ```
 
 ### 方式 D — GitHub Actions
 
-`.github/workflows/change-dispatch.yml`：定时触发 runner，详见 SKILL.md。
+参考 `skills/change-dispatch/SKILL.md` 的 GitHub Actions 示例配置定时 runner。
 
 ### 方式 E — 一次性手动触发
 
@@ -50,7 +50,7 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 
 ## 自动执行流程
 
-### 每 5 分钟（或配置的间隔）自动触发
+### 按配置间隔自动触发
 
 Runner 按配置的 schedule 调用 dispatch skill：
 
@@ -94,7 +94,7 @@ Step 7: 更新状态、提交并推送
   → git commit + git push origin <branch-prefix>/<change-id>
 ```
 
-> `<branch-prefix>` 由 change-id 字符串前缀零 I/O 派生：`hotfix-` → `hotfix/`、`chore-` → `chore/`、`fix-` → `fix/`（严格 4 字符）、其余 → `feat/`。详见 [11-task-types.md](./11-task-types.md)。
+> `change-propose` 校验 backlog / PRD type 与 change-id 派生 type 一致后，`<branch-prefix>` 由 change-id 字符串前缀派生：`hotfix-` → `hotfix/`、`chore-` → `chore/`、`fix-` → `fix/`（严格 4 字符）、其余 → `feat/`。详见 [11-task-types.md](./11-task-types.md)。
 
 ### dispatch push 后的自动效果
 

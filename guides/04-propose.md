@@ -22,7 +22,7 @@
 配置定时扫描后，PRD approved 即可自动触发 propose：
 
 ```
-/loop 15m /change-propose
+/loop <interval> /change-propose
 ```
 
 `change-propose` 自动扫描 backlog 中 PRD 已 approved 但尚未 proposed 的条目，检查依赖就绪性后自动生成四件套。详见 `skills/change-propose/SKILL.md`。
@@ -194,4 +194,4 @@ openspec/changes/ai-voice-entry/
 
 tasks.md 标记为 ready 后，dispatch runner 会在下一个 5 分钟周期自动领取（runner 配置见 [05-execution.md](./05-execution.md)）。
 
-> **自动化提示：** 使用 `/loop 15m /change-propose` 可跳过手动触发，PRD approved 后自动进入 propose 流程。
+> **自动化提示：** 使用 `/loop <interval> /change-propose` 可跳过手动触发，PRD approved 后自动进入 propose 流程。

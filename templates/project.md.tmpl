@@ -59,6 +59,11 @@ product/
 ├── backlog.md
 └── prd/
     └── _DIR.md
+.github/
+├── _DIR.md
+└── workflows/
+    ├── _DIR.md
+    └── auto-merge.yml
 src/
 ├── _DIR.md
 └── app/
@@ -89,7 +94,9 @@ src/
 初始化脚本完成后，至少要验证：
 - `pnpm install` 成功
 - `pnpm lint` 成功
+- `pnpm test` 成功
 - `AGENTS.md`、`openspec/project.md`、`openspec/config.yaml` 已落位
 - `product/backlog.md` 已存在
+- `.github/workflows/auto-merge.yml` 已存在
 - `src/_DIR.md` 与 `src/app/_DIR.md` 已存在
 - `.env.local` 已生成

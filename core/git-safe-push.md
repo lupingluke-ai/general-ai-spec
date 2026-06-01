@@ -124,7 +124,7 @@
 - ❌ `git push --force-with-lease origin main`（main 分支禁止任何 force 推送）
 - ❌ 无 retry 上限（死循环阻塞 `/loop`）
 - ❌ 把不可合并的段强行用 `--strategy-option=theirs/ours`（语义丢失）
-- ❌ STOP 时不写日志（下一轮 Luke / 另一 skill 无从追溯）
+- ❌ STOP 时不写日志（下一轮用户 / 另一 skill 无从追溯）
 
 ---
 

@@ -16,7 +16,7 @@
 
 不强制回填。自动化 skill 对"模块"列为 `—` 的行会自动跳过模块/roadmap 同步：
 
-- `prd-writer` Step 2.2 提示 Luke 补模块（可通过 `/design review M-NNN` 追加），补齐前拒绝生成 PRD
+- `prd-writer` Step 2.2 提示用户补模块（可通过 `/design review M-NNN` 追加），补齐前拒绝生成 PRD
 - `change-propose` Phase 0 跳过并写日志
 - `change-review` Step 6.3.2 跳过模块/roadmap 更新
 
@@ -82,7 +82,7 @@ B-005  AI 语音记账 - 历史记录集成  → PRD-005 → change: ai-voice-hi
 
 三条 backlog 通过 `depends-on` 声明顺序（B-004 depends-on B-003 等）。拆分由 `module-designer` 在 `/design` 对话中驱动（不再由 prd-writer 承担）。
 
-**为什么不支持 1:N？** 维持 1:1 是为了让 `/loop 15m /change-propose` 的自动触发路径零阻塞——它只需要判断"PRD approved 且未 proposed"，不需要追踪"PRD 下还有哪些 change 没生成"。高度自动化是本框架的一级约束。
+**为什么不支持 1:N？** 维持 1:1 是为了让 `/loop <interval> /change-propose` 的自动触发路径零阻塞——它只需要判断"PRD approved 且未 proposed"，不需要追踪"PRD 下还有哪些 change 没生成"。高度自动化是本框架的一级约束。
 
 ---
 
@@ -231,7 +231,7 @@ change 的 specs/ai-voice.md 中的 REMOVED Requirements
 
 1. **feature branch 写到 main 共享文件**（`product/backlog.md` / `design/roadmap.md` / `openspec/specs/**` / 主 `_DIR.md` 等）→ 两个 change 在各自 feature branch 都改同一段 → auto-merge 两次合并时物理冲突
 2. **auto-merge 期间 main 又前进了**（别的 change 先合并）→ 当前 PR 的 base 过期 → GitHub 标记 "需要更新"
-3. **多个 skill 并发 push main**（/loop 15m + /loop 10m + 任意 dispatch runner + 人工）→ 第二个被拒 (non-fast-forward)
+3. **多个 skill 并发 push main**（定时 propose + 定时 review + 任意 dispatch runner + 人工）→ 第二个被拒 (non-fast-forward)
 
 当前版本已经把三类全部系统化防住：
 
@@ -264,8 +264,8 @@ feature branch 的 force-with-lease 仅在 `change-review` Step 3.8 rebase-befor
 
 可以。dispatch skill 本身 runner-agnostic，选下面任一方式即可：
 
-1. **Claude Code `/loop`**：`/loop 5m /change-dispatch`（零配置）
-2. **cron**：`*/5 * * * * claude -p "/change-dispatch"` 或 `codex exec "/change-dispatch"`
+1. **Claude Code `/loop`**：`/loop <interval> /change-dispatch`（零配置）
+2. **cron**：`<cron> claude -p "/change-dispatch"` 或 `codex exec "/change-dispatch"`
 3. **GitHub Actions**：定时 workflow 调用 runner
 4. **一次性手动**：任意 agent 运行 `/change-dispatch`
 5. **人工实现**：直接按 tasks.md 逐项实现代码

@@ -24,6 +24,7 @@ info()  { printf '\n[INFO]  %s\n' "$*"; }
 ok()    { printf '[OK]    %s\n' "$*"; }
 skip()  { printf '[SKIP]  %s\n' "$*"; }
 would() { printf '[WOULD] %s\n' "$*"; }
+fail()  { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
 run() {
   if $DRY_RUN; then would "$*"; else eval "$*"; fi
@@ -64,18 +65,21 @@ fi
 #    Only runs if .claude/commands/ is missing (init already did it → skip)
 # ─────────────────────────────────────────────────────────────
 CLAUDE_COMMANDS="$ROOT_DIR/.claude/commands"
-if [ -d "$CLAUDE_COMMANDS" ]; then
+CLAUDE_OPENSPEC_SKILL="$ROOT_DIR/.claude/skills/openspec-propose/SKILL.md"
+if [ -d "$CLAUDE_COMMANDS" ] && [ -f "$CLAUDE_OPENSPEC_SKILL" ]; then
   skip ".claude/commands/ already exists (OpenSpec slash commands ready)"
 else
   info "Initialising OpenSpec for Claude Code ..."
   # Requires pnpm; adjust OPENSPEC_PKG if you pin a version
   OPENSPEC_PKG="${OPENSPEC_PKG:-@fission-ai/openspec@1.2.0}"
   if command -v pnpm >/dev/null 2>&1; then
-    run "pnpm dlx \"$OPENSPEC_PKG\" init --tools claude --force 2>/dev/null || true"
+    run "pnpm dlx \"$OPENSPEC_PKG\" init --tools claude --force"
+    if ! $DRY_RUN && [ ! -f "$CLAUDE_OPENSPEC_SKILL" ]; then
+      fail "OpenSpec Claude init completed but .claude/skills/openspec-propose/SKILL.md is missing."
+    fi
     $DRY_RUN || ok ".claude/commands/ created"
   else
-    printf '[WARN]  pnpm not found — skipping OpenSpec Claude init.\n'
-    printf '        Run manually: pnpm dlx %s init --tools claude --force\n' "$OPENSPEC_PKG"
+    fail "pnpm not found. Install pnpm, then run: pnpm dlx $OPENSPEC_PKG init --tools claude --force"
   fi
 fi
 
@@ -173,7 +177,7 @@ else
   printf '\nClaude Code can now:\n'
   printf '  • Read CLAUDE.md as its entry point\n'
   printf '  • Use /design /prd /change-propose /change-review (main path) via .claude/skills/\n'
-  printf '  • Read openspec/AGENTS.md for OpenSpec proposal/spec/validate/archive rules\n'
+  printf '  • Use OpenSpec official skills/commands for proposal/spec/validate/archive rules\n'
   printf '  • Access all project skills via .claude/skills/\n'
   printf '  • Use git worktrees safely (.worktrees in .gitignore)\n'
   printf '  • Drive the design layer via design/inputs/ → /design → design/modules/\n'

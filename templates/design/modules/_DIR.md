@@ -22,3 +22,7 @@ L1 模块设计文档。由 `module-designer` skill 生成和维护。
 ## 自动同步
 
 每次模块设计变更 → `design/roadmap.md` 的 `AUTO:ARCHITECTURE` + `AUTO:DEPENDENCIES` 段实时同步。
+
+`## 关联 Backlog` 行必须保留 backlog 级依赖，格式为：
+
+`- B-NNN <需求描述> [阶段] [depends-on: B-XXX, B-YYY | none]`

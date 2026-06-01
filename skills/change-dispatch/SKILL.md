@@ -38,9 +38,9 @@ git fetch origin && git branch -r | grep feat/ && gh pr list --state open
 # Call 3: gh pr list --state open --json number,headRefName,title,isDraft
 ```
 
-## 类型 → 分支/提交前缀派生规则（单一事实源）
+## 类型 → 分支/提交前缀派生规则
 
-**不读 backlog frontmatter**，直接从 `change-id` 字符串前缀派生（零 I/O）：
+`change-propose` 已经校验 backlog type、PRD type、change-id 派生 type 三者一致。dispatch 阶段只拿到 main backlog 的 change-id，因此直接从 `change-id` 字符串前缀派生 branch / commit 前缀：
 
 | 判定顺序 | change-id 前缀 | type | branch 前缀 | commit type |
 |---------|---------------|------|------------|-------------|
@@ -218,6 +218,10 @@ git commit -m "chore(<change-id>): claim <task-group-name> as executing
 
 Change-ID: <change-id>"
 git push origin <branch-prefix>/<change-id>
+
+# 记录本轮实现 diff 的基线。后续 D1/D4/范围校验只比较 claim 之后的实现变更，
+# 避免把 claim commit 对 tasks.md 的状态修改误判为范围外实现。
+DISPATCH_BASE_SHA=$(git rev-parse HEAD)
 ```
 
 其他开发者下一轮 fetch 后看到 `executing` 会跳过，不会重复领取。
@@ -270,7 +274,7 @@ Step 5 执行完成后、验证前，执行以下交叉验证。发现偏离时�
 
 **偏离处理：**
 - **硬偏离**（D1 修改了完全不相关的文件、D4 侵入其他任务组）→ 写日志 → STOP
-- **治理违规**（D1 命中禁改清单中的**治理层文件**：`product/backlog.md` / `design/roadmap.md` / `design/modules/*.md` / `openspec/specs/**.md` / `openspec/project.md` / `openspec/changes/_DIR.md`）→ 写日志 → **STOP 立即终止**（不做自动还原，会让 main 状态更乱）→ 提示 Luke 人工回滚
+- **治理违规**（D1 命中禁改清单中的**治理层文件**：`product/backlog.md` / `design/roadmap.md` / `design/modules/*.md` / `openspec/specs/**.md` / `openspec/project.md` / `openspec/changes/_DIR.md`）→ 写日志 → **STOP 立即终止**（不做自动还原，会让 main 状态更乱）→ 提示用户人工回滚
 - **main 共享 `_DIR.md` 被修改**（非治理层违规，但本应由 Step 5 Item 6 推迟）→ 写日志 WARN → 自动 `git restore <共享 _DIR.md>` 撤销该文件的本轮修改 → 把"待追加子项"补写进待办日志 → 继续；避免直接 STOP 让整个 change 卡死
 - **软偏离**（D2 遗漏一个文件、D5/D6/D7 缺头注释或 _DIR.md 条目）→ 写日志 → 自动补全后继续
 - **数据偏离**（D8 commit message 格式）→ 写日志 → 下次 commit 修正
@@ -278,8 +282,8 @@ Step 5 执行完成后、验证前，执行以下交叉验证。发现偏离时�
 **D1 禁改清单判定（实现参考）：**
 
 ```bash
-# 本轮 diff 文件集
-diff_files=$(git diff --name-only HEAD~1)
+# 本轮实现 diff 文件集（claim commit 之后的变更）
+diff_files=$(git diff --name-only "$DISPATCH_BASE_SHA")
 
 # 治理层硬禁（命中 → STOP）：
 #   ^product/backlog\.md$
@@ -293,7 +297,7 @@ diff_files=$(git diff --name-only HEAD~1)
 for f in $(echo "$diff_files" | grep '_DIR\.md$'); do
   if git ls-tree origin/main -- "$f" | grep -q .; then
     echo "WARN: $f is main-shared _DIR.md — reverting and deferring to review Step 6.1.5"
-    git restore --source=HEAD~1 -- "$f"
+    git restore --source="$DISPATCH_BASE_SHA" -- "$f"
     # 并把"待追加子项"写进 .logs/dispatch/<change-id>.md
   fi
 done
@@ -305,7 +309,7 @@ done
 
 复盘检查点完成后，执行自动化范围校验：
 
-1. 运行 `git diff --name-only` 获取本轮所有变更文件
+1. 运行 `git diff --name-only "$DISPATCH_BASE_SHA"` 获取本轮所有实现变更文件
 2. 与 design.md 中当前任务组的文件清单对比
 3. **超出清单的文件**：如果是合理的修复（测试基线、类型修正），记录 WARN 并说明原因；否则记录 STOP
 4. **清单内遗漏的文件**：记录 WARN 并尝试补全

@@ -1,6 +1,6 @@
 # 任务类型与命名规范
 
-本指南汇总 4 种任务类型的语义标签差异。**所有类型走完全相同的流程**，仅通过 change-id / branch / commit 前缀区分语义，便于下游过滤。
+本指南汇总 4 种任务类型的语义标签差异。**所有类型走完全相同的流程**，通过 backlog / PRD 的 type 声明和后续 change-id / branch / commit 前缀区分语义，便于下游过滤。
 
 ---
 
@@ -14,7 +14,7 @@
 
 **设计原则：流程一致，前缀分类**。分类只是标签，不改变执行路径。
 
-沿用 Conventional Commits / Conventional Branches 把类型做成**一等公民**，各层独立消费同一事实源（change-id 前缀）即可。
+沿用 Conventional Commits / Conventional Branches 把类型做成**一等公民**，backlog / PRD 的 type 是声明事实源；change-id 前缀是 propose 阶段校验后的派生标识，供后续自动化消费。
 
 ---
 
@@ -40,9 +40,9 @@
 
 ---
 
-## 单一事实源：change-id 前缀
+## 事实源与派生关系
 
-**所有下游（branch / PR title / commit type / flow 分支）都从 change-id 的字符串前缀派生**。4 个 skill 用 `startsWith` 判断（零 I/O，不读 backlog，不读 PRD frontmatter）。
+**backlog.type / PRD type 是声明事实源**。`change-propose` 必须校验 backlog type、PRD type、change-id 派生 type 三者一致；校验通过后，branch / PR title / commit type / flow 分支可从 change-id 字符串前缀派生，供 dispatch / review 等下游在 feature branch 上稳定消费。
 
 判定规则（严格顺序）：
 
@@ -116,11 +116,11 @@ Change-ID: <change-id>
 
 | 层 | 文件 | 职责 |
 |----|------|------|
-| 规则 | `core/config.yaml → task-types` | 权威 schema |
-| 规则 | `core/AGENTS.md → 任务类型与命名` | 规范与例外 |
+| 规则 | `core/config.yaml → task-types` | type 声明、change-id 前缀、branch 前缀、commit type 的权威 schema |
+| 规则 | `core/AGENTS.md → Artifact Contract` | runtime 入口与硬边界 |
 | 模板 | `templates/backlog.md.tmpl` | type 列 + 阶段说明 |
 | 模板 | `templates/prd.md.tmpl` / `prd-lite.md.tmpl` | Full / Lite PRD |
-| Skill | `skills/prd-writer/SKILL.md → Step 2.5` | 模板选择 |
+| Skill | `skills/prd-writer/SKILL.md → Step 2.4` | 模板选择 |
 | Skill | `skills/change-propose/SKILL.md` | 分支派生 |
 | Skill | `skills/change-dispatch/SKILL.md` | commit type 派生 |
 | Skill | `skills/change-review/SKILL.md` | 统一的审查 + 归档流程 |

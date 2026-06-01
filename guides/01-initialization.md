@@ -114,7 +114,7 @@ init.sh 自动创建 `.logs/` 目录及五个子目录。各阶段 skill 在遇�
 在 Claude Code 内直接运行：
 
 ```
-/loop 5m /change-dispatch
+/loop <interval> /change-dispatch
 ```
 
 ### 方式 B — Codex Desktop Automation（推荐 24/7 无人值守）
@@ -122,19 +122,19 @@ init.sh 自动创建 `.logs/` 目录及五个子目录。各阶段 skill 在遇�
 1. 打开 Codex Desktop → Settings → Automations
 2. 新建 Automation：
    - **Name**: `change-dispatch`
-   - **Schedule**: every 5 minutes
+   - **Schedule**: `<interval>`
    - **Worktree**: Yes
    - **Prompt**: `使用 $change-dispatch 扫描并执行就绪的任务组`
 
 ### 方式 C — cron
 
 ```cron
-*/5 * * * * cd /path/to/repo && claude --dangerously-skip-permissions -p "/change-dispatch" >> .logs/dispatch/cron.log 2>&1
+<cron> cd /path/to/repo && claude --dangerously-skip-permissions -p "/change-dispatch" >> .logs/dispatch/cron.log 2>&1
 ```
 
 ### 方式 D — GitHub Actions
 
-复制 `templates/github-workflows/change-dispatch.yml` 到 `.github/workflows/`（若提供），或参考 SKILL.md 自行编写。
+参考 `skills/change-dispatch/SKILL.md` 的 GitHub Actions 示例自行配置定时 runner。
 
 ### 方式 E — 一次性手动触发
 
@@ -150,16 +150,15 @@ pnpm install
 pnpm lint
 
 # 确认文件存在
-ls AGENTS.md CLAUDE.md openspec/project.md openspec/config.yaml product/backlog.md src/_DIR.md
+ls AGENTS.md CLAUDE.md openspec/project.md openspec/config.yaml product/backlog.md .github/workflows/auto-merge.yml src/_DIR.md
 ```
 
-## 配置 Auto-Merge（可选）
+## 配置 Auto-Merge（主路径必需）
 
-如需协同开发且 PR 无需人工审核，可启用自动合并：
+`init.sh` 已生成 `.github/workflows/auto-merge.yml`。为保证 `change-review` 转 Ready 后能自动进入 merge commit，需要在 GitHub 仓库启用 auto-merge：
 
-1. 将 `templates/github-workflows/auto-merge.yml` 复制到项目 `.github/workflows/auto-merge.yml`
-2. 在 GitHub 仓库设置中启用 auto-merge，并配置 required checks（如 test / lint / build）
-3. 添加协作者：
+1. 在 GitHub 仓库设置中启用 auto-merge，并配置 required checks（如 test / lint / build）
+2. 添加协作者：
 
 ```bash
 gh api repos/OWNER/REPO/collaborators/USERNAME -X PUT -f permission=push

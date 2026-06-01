@@ -12,22 +12,22 @@
 你：帮我 review 下 ai-voice-entry
 
 # 方式 2: 定期触发（通过 /loop）
-/loop 10m change-review
+/loop <interval> /change-review
 
 # 方式 3: dispatch push 后 CI 全绿，PR 更新可见
 ```
 
 ## 合并架构：Review + Auto-Merge 分工
 
-Review skill **不直接 merge**。合并由 `auto-merge.yml` GitHub Actions 负责。
+Review skill **不直接手工 merge**。合并优先由 `auto-merge.yml` GitHub Actions 启用 auto-merge；若 workflow 未触发，review skill 兜底执行 `gh pr merge --auto --merge` 启用 GitHub auto-merge。
 
 ```
-Review skill (Claude Code / Codex)      GitHub Actions (auto-merge.yml)
-─────────────────────────               ──────────────────────────────
+Review skill (Claude Code / Codex)      GitHub Actions / GitHub auto-merge
+─────────────────────────               ─────────────────────────────────
 轮次 1:
   审查 → 分形同步 → 本地 CI 修复
   → gh pr ready                          → 检测 ready_for_review
-                                          → gh pr merge --auto --merge
+  → 必要时 gh pr merge --auto --merge     → 启用 auto-merge
                                           → GitHub 等 required checks 通过后 merge commit
 轮次 2:
   检测 MERGED → verify → archive
@@ -105,8 +105,8 @@ git rebase origin/main
 **三种场景：**
 
 - **A 无冲突** → `git push --force-with-lease origin <branch>` → 远程 CI 重新运行；若可查询则等 CI 绿 → Step 4
-- **B change-owned 文件冲突**（design.md 与其他 change 范围重叠）→ STOP + 日志，提示 Luke 回 `/design review M-NNN` 重排
-- **C 治理层文件冲突**（说明 dispatch/其他 skill 意外写了禁改清单）→ STOP + 日志，提示 Luke 人工回滚
+- **B change-owned 文件冲突**（design.md 与其他 change 范围重叠）→ STOP + 日志，提示用户回 `/design review M-NNN` 重排
+- **C 治理层文件冲突**（说明 dispatch/其他 skill 意外写了禁改清单）→ STOP + 日志，提示用户人工回滚
 
 > main 分支禁止任何 force 推送；**`--force-with-lease` 仅本步允许**（因为 rebase 后 feature branch 历史被重写）。
 
@@ -162,6 +162,8 @@ gh pr ready <PR-number>
 1. 检测 `ready_for_review` 事件
 2. 执行 `gh pr merge --auto --merge`
 3. 由 GitHub 在 required checks 通过后执行 merge commit（保留完整历史）
+
+若 workflow 缺失或未触发，review skill 兜底执行 `gh pr merge <PR-number> --auto --merge`；若仓库未开启 GitHub auto-merge，则 STOP 并提示先开启。
 
 **合并策略：merge commit（`--no-ff`）**，保留 feature branch 上的完整提交历史。
 

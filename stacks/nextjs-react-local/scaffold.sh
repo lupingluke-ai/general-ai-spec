@@ -33,6 +33,15 @@ fi
 
 # --- 3. Install dependencies ---
 pnpm install
+pnpm add -D vitest @testing-library/react @testing-library/jest-dom jsdom
+node <<'NODE'
+const fs = require("fs");
+const pkgPath = "package.json";
+const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+pkg.scripts = pkg.scripts || {};
+pkg.scripts.test = pkg.scripts.test || "vitest run --environment jsdom --passWithNoTests";
+fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+NODE
 
 # --- 4. Create .env.local ---
 if [ ! -f ".env.local" ]; then
