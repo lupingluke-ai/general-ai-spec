@@ -128,8 +128,8 @@ depends-on: []
 
 <!-- 执行模式: interactive | 约束: 全部合并完成后 | status: pending -->
 
-- [ ] 同步更新新增目录的 _DIR.md
-- [ ] 更新 openspec/project.md 目录结构
+- [ ] 同步 change 独占目录的 _DIR.md；main 共享 _DIR.md 待办写入 pending-sync.md
+- [ ] 验证新文件头注释
 - [ ] 运行 pnpm test、pnpm lint、pnpm build
 
 ## Verify
@@ -161,7 +161,6 @@ depends-on: []
 - [ ] design.md 已落盘
 - [ ] tasks.md 已落盘（含 YAML 状态头）
 - [ ] _DIR.md 已落盘
-- [ ] openspec/changes/_DIR.md 已更新
 - [ ] delta specs 每个需求至少一个 Given/When/Then
 - [ ] tasks.md ≤ 300 行
 - [ ] 并行组内无文件写入冲突
@@ -171,7 +170,7 @@ depends-on: []
 Pre-flight 通过后：
 
 1. tasks.md YAML 头 `status` → `ready`
-2. 创建 feature branch `<branch-prefix>/<change-id>`（前缀由 change-id 类型派生，见 [11-task-types.md](./11-task-types.md)），将四件套提交到该分支
+2. 创建 feature branch `<branch-prefix>/<change-id>`（前缀由 backlog / PRD type 直接映射，见 [11-task-types.md](./11-task-types.md)），将四件套提交到该分支
 3. 推送分支并创建 Draft PR
 4. 在 main 上更新 `product/backlog.md` 对应条目阶段 → `proposed`，Change 列写入 change-id（1:1）
 5. 更新 `openspec/changes/_DIR.md` 索引表（含 branch、PR link）
@@ -192,6 +191,6 @@ openspec/changes/ai-voice-entry/
 
 ## 下一步
 
-tasks.md 标记为 ready 后，dispatch runner 会在下一个 5 分钟周期自动领取（runner 配置见 [05-execution.md](./05-execution.md)）。
+tasks.md 标记为 ready 后，dispatch runner 会在下一次已配置的扫描中自动领取（runner 配置见 [05-execution.md](./05-execution.md)）。
 
 > **自动化提示：** 使用 `/loop <interval> /change-propose` 可跳过手动触发，PRD approved 后自动进入 propose 流程。

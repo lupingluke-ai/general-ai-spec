@@ -1,7 +1,8 @@
 # Product Roadmap
 
 > 全局统筹文档。混合维护：人工段（愿景、原则、里程碑）+ AUTO 段（架构、依赖、进度）。
-> AUTO 段由 skill 自动维护，**请勿手改**——手改会在下次 skill 写入时被覆盖。
+> AUTO 段是 `product/backlog.md` + `design/modules/` 的派生视图，由写 main 状态的 skill
+> 全量重渲染，**请勿手改**——手改会在下次重渲染时被覆盖。
 
 ---
 
@@ -17,7 +18,7 @@
 
 ---
 
-<!-- AUTO:ARCHITECTURE_START — 由 module-designer 自动维护，勿手改 -->
+<!-- AUTO:ARCHITECTURE_START — 从 design/modules/ frontmatter 全量重渲染，勿手改 -->
 ## 功能架构
 
 | 模块 ID | 模块名 | 状态 | 模块设计 | 依赖 | 创建时间 |
@@ -25,7 +26,7 @@
 
 <!-- AUTO:ARCHITECTURE_END -->
 
-<!-- AUTO:DEPENDENCIES_START — 由 module-designer 自动维护，勿手改 -->
+<!-- AUTO:DEPENDENCIES_START — 由模块 depends-on 全量重渲染，勿手改 -->
 ## 模块依赖
 
 ```
@@ -34,7 +35,7 @@
 
 <!-- AUTO:DEPENDENCIES_END -->
 
-<!-- AUTO:PROGRESS_START — 由 module-designer / prd-writer / change-propose / change-review 实时维护，勿手改 -->
+<!-- AUTO:PROGRESS_START — 从 product/backlog.md 全量重渲染（写 main 状态的 skill 均会触发），勿手改 -->
 ## 开发进度
 
 <!-- 按模块分组展示 backlog 进度。每条 backlog 显示：阶段图标 + ID + 描述 + 关联信息 -->

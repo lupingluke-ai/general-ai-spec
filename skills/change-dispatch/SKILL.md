@@ -38,18 +38,20 @@ git fetch origin && git branch -r | grep feat/ && gh pr list --state open
 # Call 3: gh pr list --state open --json number,headRefName,title,isDraft
 ```
 
-## 类型 → 分支/提交前缀派生规则
+## 类型 → 分支/提交前缀映射规则
 
-`change-propose` 已经校验 backlog type、PRD type、change-id 派生 type 三者一致。dispatch 阶段只拿到 main backlog 的 change-id，因此直接从 `change-id` 字符串前缀派生 branch / commit 前缀：
+type 的事实源是 `product/backlog.md` 的**类型列**（dispatch Step 1 扫描 backlog 时同一行直接读到，无需从 change-id 字符串反解析）。由 type 映射 branch / commit 前缀：
 
-| 判定顺序 | change-id 前缀 | type | branch 前缀 | commit type |
-|---------|---------------|------|------------|-------------|
-| 1 | `startsWith("hotfix-")` | hotfix | `hotfix/` | `fix` |
-| 2 | `startsWith("chore-")` | chore | `chore/` | `chore` |
-| 3 | `startsWith("fix-")`（严格 4 字符，排除 `fixture-*`） | bug | `fix/` | `fix` |
-| 4 | 其余 | feature | `feat/` | `feat` |
+| type | branch 前缀 | commit type |
+|------|------------|-------------|
+| feature | `feat/` | `feat` |
+| bug | `fix/` | `fix` |
+| chore | `chore/` | `chore` |
+| hotfix | `hotfix/` | `fix` |
 
 `<branch-prefix>` 和 `<commit-type>` 全流程复用，禁止硬编码 `feat/`。**4 种类型走相同的 dispatch 路径**，无例外。
+
+> change-id 的命名前缀（`fix-` / `chore-` / `hotfix-`）由 `prd-writer` 按 type 生成、`change-propose` 校验，仅作语义标签；dispatch / review 不解析它。
 
 ## Runner 配置（任选其一）
 
@@ -123,7 +125,19 @@ jobs:
 ### 并发与隔离
 
 - **多 runner 同时跑 dispatch 安全**：Step 3 的 `status: executing` claim 提交作为分布式锁，其他 runner fetch 到 executing 会跳过
-- **worktree 可选**：无 worktree 时同机串行（最后一次 commit 胜），有 worktree 时同机并行，跨机天然并行
+- **同机并发必须用 worktree**：两个 dispatch 实例在同一个工作目录并发 checkout / 编辑 / commit 会互相破坏工作区（不是"最后一次 commit 胜"）。跨机器天然隔离；同一台机器上要么保证同一时刻只有一个 dispatch 实例（如单个 `/loop`），要么每轮在独立 worktree 中执行：
+
+```bash
+# 领取任务组后、开始实现前，为本轮创建隔离 worktree
+git worktree add .worktrees/<change-id>-<task-group> <branch-prefix>/<change-id>
+cd .worktrees/<change-id>-<task-group>
+# ... Step 4-8 全部在 worktree 内执行 ...
+# 完成 push 后清理
+cd <repo-root>
+git worktree remove .worktrees/<change-id>-<task-group>
+```
+
+> Codex Desktop Automation 勾选 `Worktree: yes` 即自动获得等效隔离；`.worktrees/` 已在 init.sh 写入 `.gitignore`。
 - **跨 runner 混用**：Codex Automation + Claude Code `/loop` + 人工 `/change-dispatch` 可同时启用，不会互相踩脚
 
 ---
@@ -145,7 +159,7 @@ git worktree prune
 1. 阶段为 `proposed`（执行中的细粒度状态由 tasks.md YAML status 承担，不在 backlog 反映）
 2. 有 `change-id` 列值（非空）
 
-对每个满足条件的 change-id，按派生规则取 `<branch-prefix>`（`feat/` | `fix/` | `chore/` | `hotfix/`），拼出 feature branch 名 `<branch-prefix>/<change-id>`。
+对每个满足条件的条目，读取同一行的**类型列**得到 type，按映射规则取 `<branch-prefix>`（`feat/` | `fix/` | `chore/` | `hotfix/`），拼出 feature branch 名 `<branch-prefix>/<change-id>`。
 
 如果没有满足条件的条目，输出 "No active changes found." 并退出。
 
@@ -190,6 +204,25 @@ fi
 
 **语义**：30 分钟是启发式阈值，覆盖大多数任务组执行时间；超时判定为"前一轮 worker 失联"，降级后本轮或下一轮 runner 可重新领取。被 reclaim 的任务组原已完成的代码提交（如有部分 push）保留，`pending` 语义等同"从头再跑"——dispatch Step 5 会按幂等原则重做（覆盖文件而非增量）。若实际 worker 其实还活着，它后续 push 会被 `git pull --rebase` 解决或遇到 `status` 已变化而发现冲突——这是可接受的边界代价。
 
+**额外步骤 — 收敛检查（幂等，防止并行完成竞态导致 change 卡死）：**
+
+对每个 YAML `status: executing` 的 change，若其**所有** `执行模式: auto` 任务组的 status 均已为 `done`，说明执行已完成但 YAML 状态未收敛（典型原因：多个 runner 并行完成各自任务组时，各自基于陈旧快照判断"未全完成"，都没有把 status 推进到 review）。此时：
+
+```bash
+git checkout <branch-prefix>/<change-id>
+git pull origin <branch-prefix>/<change-id>
+# 再次确认所有 auto 任务组 status: done 且 YAML status: executing
+# 将 YAML status: executing → review
+git add openspec/changes/<change-id>/tasks.md
+git commit -m "chore(<change-id>): converge status to review
+
+Change-ID: <change-id>"
+git push origin <branch-prefix>/<change-id>
+# push 被拒 → git pull --rebase 后重试一次；仍失败留给下一轮
+```
+
+收敛后该 change 跳过本轮领取（无 pending 任务组），继续扫描下一个 change。**此检查电平触发、重复执行无害**——即使某轮 runner 崩溃漏推状态，任意后续轮次都会把它补齐。
+
 如果没有满足条件的 tasks.md，输出 "No ready tasks found." 并退出。
 
 ### Step 3 — 选择并认领任务组
@@ -226,6 +259,8 @@ DISPATCH_BASE_SHA=$(git rev-parse HEAD)
 
 其他开发者下一轮 fetch 后看到 `executing` 会跳过，不会重复领取。
 
+**Claim 释放规则（防止 STOP 把任务组锁死 30 分钟）：** claim 之后、任务组完成之前，凡触发 STOP 级终止（pnpm install 失败、design.md 缺失、复盘硬偏离、rebase 冲突等），终止前**尽力释放锁**：将该任务组 `status: executing → pending` 回滚，commit（message: `chore(<change-id>): release <task-group-name> after STOP`）并 push。释放失败（如网络中断）则不重试，留给 30 分钟 stale 回收兜底。释放动作只回滚 tasks.md 状态，不回滚已提交的实现代码。
+
 ### Step 4 — 环境准备
 
 ```bash
@@ -242,28 +277,31 @@ pnpm install --frozen-lockfile
 5. 每个新建目录包含 `_DIR.md`（change 新建的，main 上不存在——可直接写）
 6. **`_DIR.md` 更新分流**（防止触碰 main 共享治理层）：
    - **change 独占 `_DIR.md`**（`git ls-tree origin/main -- <path>` 未命中，即本 change 新建目录的 `_DIR.md`）→ 新文件条目直接追加
-   - **main 共享 `_DIR.md`**（命中 origin/main，如顶层 `src/_DIR.md` / `src/features/_DIR.md`）→ **本 step 跳过不动**，记录到 `.logs/dispatch/<change-id>.md` 的"`_DIR.md` 待办"段，由 `change-review` Step 6.1.5 在 main 上统一更新
+   - **main 共享 `_DIR.md`**（命中 origin/main，如顶层 `src/_DIR.md` / `src/features/_DIR.md`）→ **本 step 跳过不动**，把待办追加到 **`openspec/changes/<change-id>/pending-sync.md`**（change 独占文件，随 branch 合并进 main），由 `change-review` 归档阶段（Step 5.0 / 6.1.5）在 main 上统一消费
 7. Commit message 包含 `Change-ID: <change-id>`
 
-**`_DIR.md` 待办日志格式：**
+**`pending-sync.md` 待办格式（不存在则创建，追加写入）：**
 
 ```markdown
-### [YYYY-MM-DD HH:mm] Step 5 `_DIR.md` 待办 · change-dispatch
+# Pending main-side sync — <change-id>
 
-- **类型**: main-shared-_DIR.md 需更新
-- **级别**: SKIP（本步跳过，归档时处理）
-- **文件**: src/features/_DIR.md
-- **待追加子项**: voice-entry.tsx（新建文件）
-- **处理**: 推迟到 change-review Step 6.1.5 在 main 上更新
+<!-- main 共享 _DIR.md 的推迟更新清单。由 dispatch / review 在 feature branch 上追加，
+     change-review 归档阶段在 main 上逐条执行并勾选。归档时随 change 目录移入 archive/。 -->
+
+- [ ] src/features/_DIR.md — 追加条目: voice-entry.tsx（新建文件）· 记录方: dispatch · YYYY-MM-DD
 ```
+
+> **为什么不写 `.logs/`**：日志是观测通道，不是数据通道。待办放在 change 目录内，天然随 branch → merge → main → archive 流转，review 在 main 上打开 `openspec/changes/<change-id>/pending-sync.md` 即可消费，无跨目录信箱错位风险。
 
 ### 复盘检查点 — 实现与设计一致性
 
 Step 5 执行完成后、验证前，执行以下交叉验证。发现偏离时写入 `.logs/dispatch/<change-id>.md`。
 
+**系统治理产物例外：** `openspec/changes/<change-id>/pending-sync.md` 是 Step 5 为推迟 main 共享 `_DIR.md` 更新而生成的 change-owned 数据通道，不属于实现文件清单。D1 / D4 / Step 6 做范围差集前必须先排除该文件，但仍要校验其中每条待办都能追溯到 design.md 声明的受影响目录或文件。
+
 | # | 检查项 | 检查方法 | 偏离类型 |
 |---|--------|----------|---------|
-| D1 | 本轮新增/修改的文件 ⊆ design.md 当前任务组文件清单 **且不命中 Feature Branch 治理层禁改清单** | `git diff --name-only` 对比 design.md + 禁改清单（见 `core/AGENTS.md`）| 范围偏离 / 治理违规 |
+| D1 | 本轮新增/修改的实现文件（排除上述 `pending-sync.md`）⊆ design.md 当前任务组文件清单 **且不命中 Feature Branch 治理层禁改清单** | `git diff --name-only` 排除系统治理产物后，对比 design.md + 禁改清单（见 `core/AGENTS.md`）| 范围偏离 / 治理违规 |
 | D2 | design.md 当前任务组声明的文件都被 touch 了 | design.md 清单 - git diff 文件集 = 遗漏 | 范围偏离 |
 | D3 | tasks.md 当前任务组每个 checkbox 都有对应实现 | 逐项检查 checkbox 描述与实际代码变更 | 范围偏离 |
 | D4 | 未修改其他任务组的独占文件 | `git diff --name-only` 不含其他 G 组的独占文件 | 范围偏离 |
@@ -275,7 +313,7 @@ Step 5 执行完成后、验证前，执行以下交叉验证。发现偏离时�
 **偏离处理：**
 - **硬偏离**（D1 修改了完全不相关的文件、D4 侵入其他任务组）→ 写日志 → STOP
 - **治理违规**（D1 命中禁改清单中的**治理层文件**：`product/backlog.md` / `design/roadmap.md` / `design/modules/*.md` / `openspec/specs/**.md` / `openspec/project.md` / `openspec/changes/_DIR.md`）→ 写日志 → **STOP 立即终止**（不做自动还原，会让 main 状态更乱）→ 提示用户人工回滚
-- **main 共享 `_DIR.md` 被修改**（非治理层违规，但本应由 Step 5 Item 6 推迟）→ 写日志 WARN → 自动 `git restore <共享 _DIR.md>` 撤销该文件的本轮修改 → 把"待追加子项"补写进待办日志 → 继续；避免直接 STOP 让整个 change 卡死
+- **main 共享 `_DIR.md` 被修改**（非治理层违规，但本应由 Step 5 Item 6 推迟）→ 写日志 WARN → 自动 `git restore <共享 _DIR.md>` 撤销该文件的本轮修改 → 把"待追加子项"补写进 `openspec/changes/<change-id>/pending-sync.md` → 继续；避免直接 STOP 让整个 change 卡死
 - **软偏离**（D2 遗漏一个文件、D5/D6/D7 缺头注释或 _DIR.md 条目）→ 写日志 → 自动补全后继续
 - **数据偏离**（D8 commit message 格式）→ 写日志 → 下次 commit 修正
 
@@ -298,7 +336,7 @@ for f in $(echo "$diff_files" | grep '_DIR\.md$'); do
   if git ls-tree origin/main -- "$f" | grep -q .; then
     echo "WARN: $f is main-shared _DIR.md — reverting and deferring to review Step 6.1.5"
     git restore --source="$DISPATCH_BASE_SHA" -- "$f"
-    # 并把"待追加子项"写进 .logs/dispatch/<change-id>.md
+    # 并把"待追加子项"写进 openspec/changes/<change-id>/pending-sync.md
   fi
 done
 ```
@@ -310,9 +348,10 @@ done
 复盘检查点完成后，执行自动化范围校验：
 
 1. 运行 `git diff --name-only "$DISPATCH_BASE_SHA"` 获取本轮所有实现变更文件
-2. 与 design.md 中当前任务组的文件清单对比
-3. **超出清单的文件**：如果是合理的修复（测试基线、类型修正），记录 WARN 并说明原因；否则记录 STOP
-4. **清单内遗漏的文件**：记录 WARN 并尝试补全
+2. 排除 `openspec/changes/<change-id>/pending-sync.md`，并单独验证其中待办可追溯到 design.md
+3. 与 design.md 中当前任务组的文件清单对比
+4. **超出清单的文件**：如果是合理的修复（测试基线、类型修正），记录 WARN 并说明原因；否则记录 STOP
+5. **清单内遗漏的文件**：记录 WARN 并尝试补全
 
 ### Step 7 — 验证
 
@@ -326,23 +365,33 @@ pnpm build
 
 ### Step 8 — 更新状态、提交并推送
 
-执行完成后：
+**硬规则：先 rebase 拉齐并行状态，再做"全 done"判定。** 判定必须基于 rebase 后的 tasks.md，否则并行 runner 各自基于陈旧快照判断"未全完成"，会导致所有组都 done 但 YAML status 永远停在 executing（由收敛检查兜底，但不应依赖兜底）。
 
-1. 勾选 tasks.md 中对应任务组的所有 checkbox
-2. 将该任务组注释中的 `status: executing` 改为 `status: done`
-3. 如果该 change 所有自动化任务组（`执行模式: auto`，兼容旧 `执行工具: Codex`）都已 done：
-   - 将 tasks.md YAML 头的 `status` 改为 `review`
+执行完成后（实现代码已在 Step 5 提交，此时工作区干净）：
 
 ```bash
+# 1. 先拉齐并行任务组的最新状态
+git pull --rebase origin <branch-prefix>/<change-id>
+```
+
+2. 基于 **rebase 后的** tasks.md：
+   - 勾选当前任务组的所有 checkbox
+   - 将该任务组注释中的 `status: executing` 改为 `status: done`
+   - 如果该 change 所有自动化任务组（`执行模式: auto`，兼容旧 `执行工具: Codex`）**此刻**都已 done：将 tasks.md YAML 头的 `status` 改为 `review`
+
+```bash
+# 3. 提交并推送
 git add -A
 git commit -m "<commit-type>(<change-id>): complete <task-group-name>
 
 Change-ID: <change-id>"
-# <commit-type> 按派生规则：feature→feat, bug→fix, chore→chore
+# <commit-type> 按类型映射：feature→feat, bug→fix, chore→chore, hotfix→fix
 
-# 推送到远程（如果并行任务组已 push，先 rebase）
-git pull --rebase origin <branch-prefix>/<change-id>
 git push origin <branch-prefix>/<change-id>
+# push 被拒（又有并行 push）→ 回到 1 重试，最多 3 轮
+# tasks.md rebase 冲突 → 按任务组主键合并：保留双方各自任务组的状态更新，
+#   合并后重新执行第 2 步的"全 done"判定
+# 3 轮仍失败 → STOP，写日志（已完成的实现 commit 保留在本地，下一轮恢复）
 ```
 
 ---
@@ -412,7 +461,7 @@ main (稳定基线)
 
 ## 并行安全
 
-- 每个 dispatch 轮次在独立 worktree 中执行（若 runner 支持；不支持则同机串行）
+- 同机多实例并发时每轮必须在独立 worktree 中执行（见"并发与隔离"）；无 worktree 则同机同一时刻只运行一个实例
 - 同一 change 的串行任务组按顺序领取（G0 先于 G1）：dispatch 检查 G0 status 为 done 才领取 G1
 - 同一 change 的并行任务组（G1-A, G1-B）可被同一轮次的不同 runner 领取
 - 并行 push 冲突通过 `git pull --rebase` 解决
@@ -426,7 +475,7 @@ main (稳定基线)
 
 | 级别 | 含义 | 行为 |
 |------|------|------|
-| **STOP** | 无法继续，需人工处理 | 写日志 → 终止当前 change → 继续扫描下一个 |
+| **STOP** | 无法继续，需人工处理 | 写日志 → 执行 Claim 释放规则（若已 claim）→ 终止当前 change → 继续扫描下一个 |
 | **WARN** | 已自动降级处理 | 写日志 → 继续执行 |
 | **SKIP** | 条件不满足，正常跳过 | 不写日志 |
 

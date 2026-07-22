@@ -29,10 +29,10 @@ description: Interactive AI skill (Claude Code or Codex) for generating Product 
 
 单次运行产出（全部落 `main` 分支）：
 
-1. `product/prd/PRD-NNN.md`（新建，首次 `status: reviewing`；用户确认 approved 后改为 `approved`）
+1. `product/prd/PRD-NNN.md`（新建，含按规则生成的 `change-id`；首次 `status: reviewing`，用户确认 approved 后改为 `approved`）
 2. `product/backlog.md`（目标 B-NNN 阶段 idea → exploring，PRD 列写入 PRD-NNN）
-3. `design/modules/M-NNN-*.md`（`## 关联 Backlog` 小节更新该行阶段；`status: planning → active` 当且仅当本 skill 首次将该模块的任一 backlog 推进到 exploring）
-4. `design/roadmap.md` 的 `AUTO:ARCHITECTURE` 段（若 module status 变化）+ `AUTO:PROGRESS` 段（目标行 💡 → 🔎）
+3. `design/modules/M-NNN-*.md`（`## 修订历史` 追加；`status: planning → active` 当且仅当本 skill 首次将该模块的任一 backlog 推进到 exploring）
+4. `design/roadmap.md` 的三段 AUTO 区（从 backlog + modules 全量重渲染）
 
 ---
 
@@ -93,7 +93,24 @@ git pull origin main
 - 生成的 PRD frontmatter 必须写 `type: <type>`，与 backlog 一致
 - 必写 `module-ref: <M-NNN>`，与 backlog 的"模块"列一致
 - 必写 `design-inputs:`，至少包含 `design/modules/<M-NNN>-<slug>.md`（模块文档强制引用）；其余 input 可按对话需要追加
+- **必写 `change-id`**，按下方生成规则产出（这是 change-propose 的硬前置，缺失或占位符会导致自动扫描静默跳过）
 - Lite PRD 的 Must Have ≥ 1；AC 数 ≥ 预估 delta specs 场景数
+
+### 2.5 change-id 生成规则
+
+`change-id = <类型前缀><kebab-slug>`：
+
+| type | 前缀 | 示例 |
+|------|------|------|
+| feature | （无） | `ai-voice-entry` |
+| bug | `fix-` | `fix-login-redirect` |
+| chore | `chore-` | `chore-upgrade-next` |
+| hotfix | `hotfix-` | `hotfix-payment-500` |
+
+- `<kebab-slug>`：从需求名提炼 2–4 个英文单词，小写连字符
+- 全局唯一：与 `openspec/changes/`（含 `archive/`）及 backlog Change 列已有 change-id 不重名，重名时追加限定词
+- 前缀必须与 type 匹配（change-propose 会做一致性校验，不匹配即 STOP）
+- 禁止保留模板占位符（如 `kebab-case`）
 
 ---
 
@@ -122,7 +139,7 @@ git pull origin main
   printf '%s\n' "B-NNN" | sed 's/^B-/PRD-/'
   ```
   若目标 `product/prd/PRD-NNN.md` 已存在，则进入增量对话或状态更新，不新分配编号。
-- frontmatter 按 Step 2.4 的硬性要求填齐
+- frontmatter 按 Step 2.4 的硬性要求填齐（含按 Step 2.5 生成的 `change-id`）
 - `status: reviewing`
 - 正文按对应模板结构填充
 
@@ -137,11 +154,10 @@ git pull origin main
 
 ---
 
-## Step 6 — 更新 Module 文档与 Roadmap（实时同步）
+## Step 6 — 更新 Module 文档并全量重渲染 Roadmap
 
 ### 6.1 更新 `design/modules/<M-NNN>-*.md`
 
-- `## 关联 Backlog` 小节中对应 B-NNN 行的阶段标记 `[idea] → [exploring]`
 - `## 修订历史` 追加一行 `YYYY-MM-DD | B-NNN 进入 exploring | prd-writer`
 - **若该模块之前所有 backlog 都在 idea**，本次推进意味着模块"首次激活"：
   - frontmatter `status: planning → active`
@@ -149,19 +165,11 @@ git pull origin main
 
 判定模块是否"首次激活"的方法：读 `product/backlog.md` 中所有归属该模块的 backlog 行，若除当前 B-NNN 外其余都在 `idea`（或列表为空），则本次推进即首次激活。
 
-### 6.2 更新 `design/roadmap.md`
+> `## 关联 Backlog` 行不携带阶段标签（阶段唯一存于 backlog.md），本步不改该小节。
 
-**仅在 module status 变化时**更新 `AUTO:ARCHITECTURE` 段的对应行（status 列）。边界由 `<!-- AUTO:ARCHITECTURE_START -->` / `<!-- AUTO:ARCHITECTURE_END -->` 注释包裹。
+### 6.2 重渲染 `design/roadmap.md` AUTO 段
 
-**每次都更新** `AUTO:PROGRESS` 段：
-- 找到对应模块的 `### M-NNN <模块名>` 小节
-- 将该 B-NNN 行的图标从 `💡 idea` 改为 `🔎 exploring`
-- **非本行保持原样**，尤其非 idea/exploring 阶段的行（`change-propose` / `change-review` 会维护那些）
-
-**AUTO 段并发约定（本 skill 负责）：**
-- 只改本次 B-NNN 对应行（idea → exploring）
-- 读取全量 → 局部替换 → 写回
-- 遇到其他阶段或其他 backlog 的行原样保留
+backlog（Step 5）与模块文档（6.1）落盘后，从它们**全量重渲染**三段 AUTO 区（渲染规则见 `core/git-safe-push.md` 的"AUTO 段重渲染"）。人工段原样保留。重渲染幂等，无需"只改自己那行"的行级并发约定。
 
 ---
 
@@ -177,14 +185,14 @@ Step 6 完成后、Commit 前，**必须**执行以下交叉验证。
 | P2 | PRD `design-inputs` 包含 module 文档路径 | 检查列表 | 硬偏离 |
 | P3 | PRD Must Have / AC 可追溯到 module 边界的"承担"小节 | 对比 module 边界 | 范围偏离 |
 | P4 | PRD type 与 backlog type 一致 | 字符串比对 | 硬偏离 |
-| P5 | module 文档 `## 关联 Backlog` 中该 B-NNN 行阶段 = exploring | 行级比对 | 一致性偏离 |
-| P6 | roadmap AUTO:PROGRESS 中该 B-NNN 行图标 = 🔎 | 行级比对 | 一致性偏离 |
+| P5 | PRD `change-id` 已生成：非空、非模板占位符、前缀与 type 匹配（Step 2.5 规则）、全局唯一 | 字符串校验 + 与 changes/ 和 backlog Change 列比对 | 硬偏离 |
+| P6 | roadmap AUTO 段重渲染后与 backlog 一致（抽查本 B-NNN 行图标 = 🔎） | 渲染结果抽查 | 一致性偏离 |
 | P7 | PRD `depends-on` = module `## 关联 Backlog` 行尾 `[depends-on: ...]` + 本轮对话新增依赖 | 集合比对 | 一致性偏离 |
 
 **偏离处理：**
-- **硬偏离**（P1/P2/P4 字段不一致）→ 写日志 → 自动修正（以 backlog 为准）
+- **硬偏离**（P1/P2/P4/P5 字段不一致或缺失）→ 写日志 → 自动修正（P1/P4 以 backlog 为准；P5 按 Step 2.5 重新生成）
 - **范围偏离**（P3 越界）→ 写日志 → 回 Step 3 让用户决策（扩边界 / 拒绝 / 改挂模块）
-- **一致性偏离**（P5/P6/P7 同步未落盘）→ 写日志 → 自动补齐
+- **一致性偏离**（P6/P7 同步未落盘）→ 写日志 → 自动补齐
 
 ---
 
@@ -215,7 +223,9 @@ PRD-Status: reviewing"
 git push origin main
 # 被拒 → git pull --rebase origin main → 回到 push
 # rebase 冲突：
-#   - product/backlog.md / design/roadmap.md AUTO:* / design/modules/*.md 关联 Backlog / 修订历史 → 按协议自动合并
+#   - product/backlog.md → 按 B-NNN 主键合并
+#   - design/roadmap.md AUTO 段 → 任取一侧后从 backlog + modules 全量重渲染
+#   - design/modules/*.md 修订历史 → append 合并
 #   - 主 specs / 模块边界等策略不覆盖段 → STOP + 日志
 # 3 轮仍失败 → STOP，写日志到 .logs/prd/PRD-NNN.md
 ```
@@ -264,7 +274,7 @@ git pull origin main
 |---|---|
 | Step 2.2 "模块"列缺失 | 拒绝生成 PRD；提示用户走 `/design` 或 `/design review` 补齐 |
 | Step 3 对话越界 | 按 Step 3 的两档处理（小调 / 大越界） |
-| Step 6.1 module 文档并发写入冲突 | `git pull --rebase` 后重试；P5 复盘兜底 |
+| Step 6.1 module 文档并发写入冲突 | `git pull --rebase` 后重试；修订历史按 append 合并 |
 | Step 7 push 被拒 | 走 `core/git-safe-push.md`（3 轮 pull-rebase-push），3 轮失败 STOP 写日志 |
 
 ---
@@ -284,6 +294,6 @@ git pull origin main
 - ❌ 不做 idea 拆分（已下放到 `module-designer`）
 - ❌ 不跨模块写 PRD（越界时拒绝对话）
 - ❌ 不在 feature branch 操作（PRD 是产品文档，落 main）
-- ❌ 不碰 AUTO:PROGRESS 非 idea/exploring 阶段的行
-- ❌ 不覆盖 module 文档的人工段（只动 frontmatter、`## 关联 Backlog`、`## 修订历史`）
+- ❌ 不手工逐行编辑 AUTO 段（只做全量重渲染），不动 roadmap 人工段
+- ❌ 不覆盖 module 文档的人工段（只动 frontmatter 与 `## 修订历史`）
 - ❌ 不自动触发 `/change-propose`（PRD approved 后由人工或配置好的 runner 接手）

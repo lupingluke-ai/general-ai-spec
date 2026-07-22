@@ -8,7 +8,7 @@
 
 - 主开发流程：`/design` → `/prd` → `/change-propose` → dispatch runner 自动执行 → `/change-review`
 - 五层架构：`design/inputs/` → `design/modules/` → `product/backlog.md` → `product/prd/` → `openspec/changes/`
-- 全局蓝图：`design/roadmap.md`（AUTO 段实时同步：ARCHITECTURE / DEPENDENCIES / PROGRESS）
+- 全局蓝图：`design/roadmap.md`（AUTO 段从 backlog + modules 全量重渲染：ARCHITECTURE / DEPENDENCIES / PROGRESS）
 - 分形文档：每个目录维护 `_DIR.md`，关键文件维护 `@input/@output/@pos`
 - 实现顺序见 `openspec/project.md`
 - 禁止项见 `AGENTS.md ## Do NOT`

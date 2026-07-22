@@ -39,18 +39,18 @@ design-inputs:                    # 必填；至少包含模块文档路径
 
 自动扫描时，缺少 `type`、`depends-on`、`change-id`、`module-ref` 或 `design-inputs` 的 PRD 会被跳过；显式 `/change-propose B-NNN` 命中这些问题时 STOP 并写日志。`design-inputs` 必须包含一条指向 `design/modules/<M-NNN>-*.md` 的路径，否则视为缺失。
 
-## 类型 → 分支/提交前缀派生规则
+## 类型 → 分支/提交前缀映射规则
 
-backlog / PRD 的 `type` 是声明事实源；`change-id` 前缀用于校验声明是否一致，并在通过校验后派生 branch / commit / PR 前缀。判定按**严格顺序**：
+backlog / PRD 的 `type` 是声明事实源；`change-id` 的命名前缀由 `prd-writer` 按 type 生成（feature 无前缀 / bug `fix-` / chore `chore-` / hotfix `hotfix-`），本 skill 只做一致性校验。由 type 映射 branch / commit / PR 前缀：
 
-| 判定顺序 | change-id 前缀匹配 | type | branch 前缀 | commit type | PR 标题前缀 |
-|---------|-------------------|------|------------|-------------|------------|
-| 1 | `startsWith("hotfix-")` | hotfix | `hotfix/` | `fix` | `fix` |
-| 2 | `startsWith("chore-")` | chore | `chore/` | `chore` | `chore` |
-| 3 | `startsWith("fix-")`（严格 4 字符，排除 `fixture-*`） | bug | `fix/` | `fix` | `fix` |
-| 4 | 其余 | feature | `feat/` | `feat` | `feat` |
+| type | branch 前缀 | commit type | PR 标题前缀 |
+|------|------------|-------------|------------|
+| feature | `feat/` | `feat` | `feat` |
+| bug | `fix/` | `fix` | `fix` |
+| chore | `chore/` | `chore` | `chore` |
+| hotfix | `hotfix/` | `fix` | `fix` |
 
-Phase 0 必须验证 backlog type、PRD type、change-id 派生 type 三者一致。验证通过后，派生结果在 Phase 1/2 全程复用，禁止重新计算或硬编码 `feat/`。**4 种类型走完全相同的执行路径**，前缀差异仅用于语义标签（git log / release notes 过滤）。
+Phase 0 必须验证：backlog type = PRD type，且 change-id 命名前缀与 type 匹配（type=bug 必须 `fix-` 开头、type=feature 不得携带 `fix-`/`chore-`/`hotfix-` 前缀等）。验证通过后，映射结果在 Phase 1/2 全程复用，禁止重新计算或硬编码 `feat/`。**4 种类型走完全相同的执行路径**，前缀差异仅用于语义标签（git log / release notes 过滤）。
 
 ---
 
@@ -69,7 +69,7 @@ Phase 0 必须验证 backlog type、PRD type、change-id 派生 type 三者一�
 3. PRD `status: approved`
 4. PRD 有 `type`、`change-id`、`depends-on`、`module-ref`、`design-inputs` 字段
 5. `design-inputs` 至少包含一条指向 `design/modules/<module-ref>-*.md` 的路径，且该文件存在
-6. backlog type、PRD type、change-id 派生 type 三者一致
+6. backlog type = PRD type，且 change-id 命名前缀与 type 匹配（prd-writer 生成规则）
 7. `depends-on` 中所有依赖条目阶段为 `done`
 8. `<branch-prefix>/<change-id>` 远程分支不存在，或远程分支已存在但 backlog 仍停留在 `exploring`（发布恢复模式）
 
@@ -96,7 +96,7 @@ Phase 0 必须验证 backlog type、PRD type、change-id 派生 type 三者一�
 
 ### 1.1 创建 Feature Branch
 
-按"类型 → 分支/提交前缀派生规则"取 `<branch-prefix>`：
+按"类型 → 分支/提交前缀映射规则"取 `<branch-prefix>`（读 PRD/backlog 的 type）：
 
 ```bash
 git checkout main
@@ -143,6 +143,8 @@ mkdir -p openspec/changes/<change-id>/specs
 ### 1.5 _DIR.md
 
 为 change 目录创建索引。
+
+> 执行期若 dispatch / review 需要推迟 main 共享 `_DIR.md` 的更新，会在本目录追加 `pending-sync.md`（change 独占，随分支合并进 main，由 review 归档阶段消费）。propose 阶段不创建该文件。
 
 ### 1.6 tasks.md
 
@@ -252,7 +254,7 @@ Backlog-Ref: B-NNN
 Change-ID: <change-id>"
 ```
 
-> commit 首词统一用 `chore`（四件套本身是治理文档，不是功能代码）。实现阶段的 commit 按派生 `<commit-type>` 使用 `feat|fix|chore`。
+> commit 首词统一用 `chore`（四件套本身是治理文档，不是功能代码）。实现阶段的 commit 按 type 映射得到的 `<commit-type>` 使用 `feat|fix|chore`。
 
 ```bash
 git push -u origin <branch-prefix>/<change-id>
@@ -260,7 +262,7 @@ git push -u origin <branch-prefix>/<change-id>
 
 ### 创建 Draft PR
 
-PR 标题前缀按派生 `<pr-type>`（feat/fix/chore）：
+PR 标题前缀按 type 映射得到的 `<pr-type>`（feat/fix/chore）：
 
 发布恢复模式下先查询是否已有 Draft PR；已有则复用 PR number，不重复创建。只有远程 branch 存在但 PR 缺失时，才补建 Draft PR。
 
@@ -294,14 +296,11 @@ git pull origin main
 **2. `openspec/changes/_DIR.md`**：追加索引条目（含 branch + PR link）
 
 **3. `design/modules/<M-NNN>-*.md`**：
-  - `## 关联 Backlog` 小节对应 B-NNN 行阶段 `[exploring] → [proposed]`
   - `## 修订历史` 追加 `YYYY-MM-DD | B-NNN 四件套就绪 (<change-id>) | change-propose`
   - **若 frontmatter `status: planning`，升级为 `active`**（本 skill 的模块激活兜底；正常路径下 prd-writer 已经做过，但若出现某些 backlog 绕过 prd-writer 的场景，此处兜底）
+  - `## 关联 Backlog` 行不携带阶段标签（阶段唯一存于 backlog.md），本步不改该小节
 
-**4. `design/roadmap.md`**：
-  - `AUTO:ARCHITECTURE` 段：若模块 status 本次变化则替换对应行
-  - `AUTO:PROGRESS` 段：目标 B-NNN 行图标 `🔎 exploring → 📝 proposed`
-  - 非本行保持原样（其他模块与其他 backlog 由各自 skill 维护）
+**4. `design/roadmap.md`**：backlog 与模块文档落盘后，从它们**全量重渲染**三段 AUTO 区（渲染规则见 `core/git-safe-push.md` 的"AUTO 段重渲染"）。人工段原样保留。
 
 ```bash
 git add product/backlog.md
@@ -323,15 +322,12 @@ Backlog-Stage: proposed"
 git push origin main
 # 被拒（non-fast-forward）→ git pull --rebase origin main → 回到 push
 # rebase 冲突：
-#   - product/backlog.md / design/roadmap.md AUTO:* / design/modules/*.md 常见段 → 按协议自动合并后续 push
+#   - product/backlog.md → 按 B-NNN 主键合并
+#   - design/roadmap.md AUTO 段 → 任取一侧后从 backlog + modules 全量重渲染
+#   - design/modules/*.md 修订历史 → append 合并
 #   - 主 specs / 模块边界等策略不覆盖段 → STOP + 日志
 # 3 轮仍失败 → STOP，写日志到 .logs/propose/<change-id>.md
 ```
-
-**AUTO 段并发约定（本 skill 负责）：**
-- 只修改本次 B-NNN 的 AUTO:PROGRESS 行（exploring → proposed）
-- 只在本次导致 module status 变化时触碰 AUTO:ARCHITECTURE 的对应行
-- 其余行原样保留（与其他 skill 并发时由 git-safe-push 协议按 B-NNN/M-NNN 主键合并）
 
 ### 输出
 
@@ -365,7 +361,7 @@ git push origin main
 | 依赖条目未 done | 前置未完成，等待下一轮扫描；显式 `/change-propose B-NNN` 时只提示等待，不写 STOP |
 | `<branch-prefix>/<change-id>` 已存在且 backlog 已为 `proposed` / `done` | 已 proposed / 已归档 |
 | backlog 阶段已为 proposed/done | 已处理 |
-| backlog type、PRD type、change-id 派生 type 不一致 | 类型声明与命名派生矛盾（如 type=feature 但 change-id 以 `fix-` 开头） |
+| backlog type、PRD type 不一致，或 change-id 命名前缀与 type 不匹配 | 类型声明与命名矛盾（如 type=feature 但 change-id 以 `fix-` 开头） |
 
 ## 问题日志
 
@@ -386,7 +382,7 @@ git push origin main
 | PRD 缺字段 | 显式 `/change-propose B-NNN` 时，`type` / `change-id` / `depends-on` / `module-ref` / `design-inputs` 缺失 |
 | 模块文档缺失 | `design/modules/<M-NNN>-*.md` 不存在 |
 | Scope 越界 | proposal.md Scope 超出模块"承担"边界（P7 硬偏离）|
-| type 与前缀不一致 | backlog type、PRD `type` 字段与 change-id 派生 type 冲突 |
+| type 与前缀不一致 | backlog type、PRD `type` 字段与 change-id 命名前缀冲突 |
 | Git 操作失败 | checkout/commit/push 任一失败 |
 | PR 创建失败 | `gh pr create` 失败 |
 | Pre-flight 失败 | 6 项检查任一不通过 |

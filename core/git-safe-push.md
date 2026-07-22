@@ -50,28 +50,27 @@
 
 - 两侧改同一 B-NNN 行 → "最新阶段胜出"（阶段顺序：`idea < exploring < proposed < done`）
 - 两侧改不同 B-NNN 行 → 各自保留
-- 新增行冲突（双方都在"未归类"尾部追加 B-NNN）→ 按 B 编号升序合并
+- 新增行冲突（双方都在尾部追加 B-NNN）→ 按 B 编号升序合并
+- **编号碰撞**（同一 B-NNN 双方内容不同，即两个并发会话分配了同号）→ 保留先到达远端的一侧；本地行按"当前最大 B-NNN + 1"顺移重编号（同步更新模块文档 `## 关联 Backlog` 与 roadmap 重渲染），写 WARN 日志后重试
 - 表头 / 分组标题区冲突 → STOP
 
-### `design/roadmap.md` AUTO:* 段
+### `design/roadmap.md` AUTO:* 段 — AUTO 段重渲染
 
-按 **主键行级** 合并（AUTO 段外的人工维护区冲突直接 STOP）：
+AUTO 三段是 `product/backlog.md` + `design/modules/*.md` 的**派生视图，不存储独立状态**，因此不做行级合并：
 
-| 段 | 主键 |
-|---|---|
-| `AUTO:ARCHITECTURE` | M-NNN（模块 ID）|
-| `AUTO:DEPENDENCIES` | `M-NNN → M-NNN`（依赖对）|
-| `AUTO:PROGRESS` | B-NNN（backlog ID）|
-
-- 同键双方都改 → 最新状态胜出（阶段 / status 按该字段自有序关系）
-- 不同键 → 各自保留
+- **冲突解决** = 任取一侧（`git checkout --ours/--theirs` 均可）→ **先解决 `backlog.md` / `modules/*.md` 的冲突（它们是事实源，按各自主键合并）**→ 再从合并后的 backlog + modules **全量重渲染**三段 AUTO 区 → 一并提交。渲染必须在事实源合并之后，保证视图反映合并结果
+- **渲染规则**（所有写 main 状态的 skill 统一使用）：
+  - `AUTO:ARCHITECTURE`：遍历 `design/modules/*.md` frontmatter，按 M-NNN 升序生成模块表（ID / 名 / status / 链接 / depends-on / created）
+  - `AUTO:DEPENDENCIES`：由各模块 `depends-on` 生成邻接表，按 M-NNN 升序
+  - `AUTO:PROGRESS`：遍历 backlog 按模块分节，每条 B-NNN 一行，图标按阶段列映射（`💡 idea | 🔎 exploring | 📝 proposed | ✅ done`）
+- AUTO 段外的人工维护区冲突 → STOP
 
 ### `design/modules/M-NNN-*.md`
 
 按段处理：
 
 - **frontmatter**：`status` 字段按 `planning < active < done` 取较新；其他字段冲突 → STOP
-- **`## 关联 Backlog` 段**：按 B-NNN 主键行合并（同 `backlog.md` 规则）
+- **`## 关联 Backlog` 段**：按 B-NNN 主键行合并（行内只含描述 + depends-on，无阶段标签，冲突面很小）
 - **`## 修订历史` 段**：append 双方记录，按日期升序去重
 - **其他段**（模块边界 / 对外接口 / 技术选型等）：冲突 → STOP（需人工确认设计意图）
 

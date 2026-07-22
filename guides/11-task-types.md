@@ -14,7 +14,7 @@
 
 **设计原则：流程一致，前缀分类**。分类只是标签，不改变执行路径。
 
-沿用 Conventional Commits / Conventional Branches 把类型做成**一等公民**，backlog / PRD 的 type 是声明事实源；change-id 前缀是 propose 阶段校验后的派生标识，供后续自动化消费。
+沿用 Conventional Commits / Conventional Branches 把类型做成**一等公民**，backlog / PRD 的 type 是声明事实源；change-id 前缀由 `prd-writer` 生成、由 propose 校验，只作为命名语义标签，不承担下游 type 反解析。
 
 ---
 
@@ -42,19 +42,18 @@
 
 ## 事实源与派生关系
 
-**backlog.type / PRD type 是声明事实源**。`change-propose` 必须校验 backlog type、PRD type、change-id 派生 type 三者一致；校验通过后，branch / PR title / commit type / flow 分支可从 change-id 字符串前缀派生，供 dispatch / review 等下游在 feature branch 上稳定消费。
-
-判定规则（严格顺序）：
+**backlog.type / PRD type 是声明事实源**。`change-id` 的命名前缀由 `prd-writer` 按 type 生成、`change-propose` 校验（type=bug 必须 `fix-` 开头等）。branch / PR title / commit type / flow **由 type 直接映射**（dispatch / review 扫描 backlog 时读同行"类型"列，或从 PR 分支前缀得到，不做 change-id 字符串反解析）：
 
 ```
-1. hotfix-<rest>   → hotfix
-2. chore-<rest>    → chore
-3. fix-<rest>      → bug（严格 4 字符含连字符，排除 fixture-* 等）
-4. 其余            → feature
+feature → feat/  · feat  · Full PRD · delta required
+bug     → fix/   · fix   · Lite PRD · delta optional
+chore   → chore/ · chore · Lite PRD · delta optional
+hotfix  → hotfix/· fix   · Lite PRD · delta optional
 ```
 
-> 前缀合法命名示例：`chat-ui-basic-route`（feature）、`fix-login-redirect`（bug）、`chore-upgrade-next-15`（chore）、`hotfix-payment-500`（hotfix）。
-> 反例：`fixture-data-import` 不是 bug，`fix-up-payment` 符合 bug 规则（前 4 字符严格为 `fix-`）。
+change-id 前缀（供 propose 校验一致性、便于 git log 过滤）命名示例：`chat-ui-basic-route`（feature，无前缀）、`fix-login-redirect`（bug）、`chore-upgrade-next-15`（chore）、`hotfix-payment-500`（hotfix）。
+
+> **为什么不再从 change-id 反解析 type**：type 已在 backlog 类型列显式存在，反解析要额外处理 `fix-` 严格 4 字符、排除 `fixture-*` 等陷阱，且让"唯一没人把关的字段"承担了下游分支派生的重任。直接读 type 列消除这类隐患。
 
 ---
 
@@ -65,8 +64,8 @@
                                     │                       ↑
                          tasks.md: draft→ready→executing→review→done
                                        │      │       │       │
-                                   propose dispatch review  review
-                                           (领取)   (轮 1)  (轮 2)
+                                   propose dispatch  收敛   review
+                                           (领取) (全done→review)(合并+归档)
 ```
 
 **Backlog 4 阶段**（main 上，治理层）：
@@ -74,7 +73,7 @@
 - **(design)**：`/design` 由 `module-designer` 建模块 + 拆 idea + 自动建议 type
 - **idea**：backlog 新建条目，`type` + `模块列` 已填（由 module-designer 分配）
 - **exploring**：`/prd B-NNN` 生成 PRD（feature → Full；bug/chore/hotfix → Lite）
-- **proposed**：`/change-propose B-NNN` 生成四件套 + Draft PR，branch 按 type 前缀派生
+- **proposed**：`/change-propose B-NNN` 生成四件套 + Draft PR，branch 按 type 映射前缀
 - **done**：verify → sync specs → archive → backlog 更新 → 若为模块最后一条，模块 status `active → done`
 
 **执行细粒度**（tasks.md YAML status，change 独占）：
@@ -82,7 +81,7 @@
 - **draft**：change-propose 编写四件套期间
 - **ready**：pre-flight 通过，等待 dispatch 领取
 - **executing**：dispatch 领取中（`status: executing` commit 作分布式锁）
-- **review**：所有自动化任务组完成，等待 change-review 轮次 1
+- **review**：所有自动化任务组完成（dispatch 收敛判定），等待 change-review 审查 + 合并 + 归档（单轮闭环）
 - **done**：归档完成
 
 > 为什么不让 backlog 反映执行细粒度？——dispatch runner 在 feature branch 上工作，**禁碰 main 治理层**（见 `core/AGENTS.md` Feature Branch 治理层禁改清单）。细粒度只能落在 change 独占的 tasks.md 里。
@@ -121,7 +120,7 @@ Change-ID: <change-id>
 | 模板 | `templates/backlog.md.tmpl` | type 列 + 阶段说明 |
 | 模板 | `templates/prd.md.tmpl` / `prd-lite.md.tmpl` | Full / Lite PRD |
 | Skill | `skills/prd-writer/SKILL.md → Step 2.4` | 模板选择 |
-| Skill | `skills/change-propose/SKILL.md` | 分支派生 |
-| Skill | `skills/change-dispatch/SKILL.md` | commit type 派生 |
+| Skill | `skills/change-propose/SKILL.md` | type → branch / PR 前缀映射 |
+| Skill | `skills/change-dispatch/SKILL.md` | type → commit type 映射 |
 | Skill | `skills/change-review/SKILL.md` | 统一的审查 + 归档流程 |
 | 工作流 | `guides/09-git-github-workflow.md` | Git 全流程（见 Stage 图中分支命名） |

@@ -5,8 +5,10 @@
 - Node.js 18+
 - pnpm 已安装
 - Git 已初始化
+- **GitHub 远程仓库已创建，且 `gh auth status` 通过**——`change-propose` 需要创建 Draft PR，`change-review` 需要合并 PR；没有远程仓库流水线走不到 propose 之后
 - Claude Code 或 Codex 已安装（用于规划和审查）
 - 至少选择一种 dispatch runner（Codex Desktop / Claude Code `/loop` / cron / GitHub Actions / 手动），详见下文
+- 全自动闭环还需给 `change-review` 配置定时触发（如 `/loop <interval> /change-review`）——review 的兜底等待与中断恢复依赖下一次扫描
 
 ## 初始化命令
 
@@ -150,21 +152,21 @@ pnpm install
 pnpm lint
 
 # 确认文件存在
-ls AGENTS.md CLAUDE.md openspec/project.md openspec/config.yaml product/backlog.md .github/workflows/auto-merge.yml src/_DIR.md
+ls AGENTS.md CLAUDE.md openspec/project.md openspec/config.yaml product/backlog.md .github/workflows/ci.yml src/_DIR.md
 ```
 
-## 配置 Auto-Merge（主路径必需）
+## CI 与合并策略
 
-`init.sh` 已生成 `.github/workflows/auto-merge.yml`。为保证 `change-review` 转 Ready 后能自动进入 merge commit，需要在 GitHub 仓库启用 auto-merge：
+`init.sh` 已生成 `.github/workflows/ci.yml`（test / lint / build），dispatch 的每次 push 与 PR 都会触发。
 
-1. 在 GitHub 仓库设置中启用 auto-merge，并配置 required checks（如 test / lint / build）
-2. 添加协作者：
+**默认路径（零仓库配置）：** `change-review` 在本地跑完同样的 CI 三件套并 rebase 到最新 main 后，直接 `gh pr merge --merge` 完成合并，同一轮继续 verify + 归档。远端 `ci.yml` 作为第二道观测保障，不阻塞合并。
 
-```bash
-gh api repos/OWNER/REPO/collaborators/USERNAME -X PUT -f permission=push
-```
+**可选加固（推荐生产项目）：** 在 GitHub 仓库设置中：
 
-该 workflow 会在 PR 从 Draft 转为 Ready 时启用 GitHub auto-merge，并在 required checks 通过后用 merge commit 合并；它与 `change-propose`（创建 Draft PR）和 `change-review`（转 Ready）配合使用。
+1. 开启 branch protection，将 CI workflow 的 `ci` job 配置为 required check
+2. 开启 "Allow auto-merge"
+
+配置后，`change-review` 的即时合并会因 checks 未跑完被拒，自动退化为 `gh pr merge --auto --merge`（GitHub 等 checks 绿后合并），下一轮 review 扫描到 MERGED 后继续 verify + 归档。**只开 branch protection 而不开 auto-merge 会导致 review STOP**——两项要么都开，要么都不开。
 
 ## 下一步
 

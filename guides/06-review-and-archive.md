@@ -17,33 +17,33 @@
 # 方式 3: dispatch push 后 CI 全绿，PR 更新可见
 ```
 
-## 合并架构：Review + Auto-Merge 分工
+## 合并架构：单轮闭环，直接合并
 
-Review skill **不直接手工 merge**。合并优先由 `auto-merge.yml` GitHub Actions 启用 auto-merge；若 workflow 未触发，review skill 兜底执行 `gh pr merge --auto --merge` 启用 GitHub auto-merge。
+Review skill 在本地 CI 三件套全绿 + rebase 到最新 main 后，**直接 `gh pr merge --merge` 完成合并**，同一次调用内继续 verify + 归档——一次触发走完一个 change 的全部收尾。
 
 ```
-Review skill (Claude Code / Codex)      GitHub Actions / GitHub auto-merge
-─────────────────────────               ─────────────────────────────────
-轮次 1:
-  审查 → 分形同步 → 本地 CI 修复
-  → gh pr ready                          → 检测 ready_for_review
-  → 必要时 gh pr merge --auto --merge     → 启用 auto-merge
-                                          → GitHub 等 required checks 通过后 merge commit
-轮次 2:
-  检测 MERGED → verify → archive
+Review skill (Claude Code / Codex) — 单轮闭环
+──────────────────────────────────────────
+审查 → 分形同步 → 本地 CI 修复 → rebase to main
+  → gh pr ready + gh pr merge --merge        ← 默认路径：即时合并
+  → verify（三维度）→ sync specs → archive
   → backlog: done
 ```
 
-## 5-State Machine
+**兜底路径（仅当仓库配置了 required checks）：** 即时合并被拒时退化为 `gh pr merge --auto --merge`，由 GitHub 等 checks 绿后异步合并；本轮结束，下一轮 review 扫描到 MERGED 后从 verify 续跑。
 
-每次 review skill 启动时，先用 `gh pr view` 判断 PR 状态，决定执行路径：
+## 状态机：断点续跑
+
+每次 review skill 启动时，先用 `gh pr view` 判断 PR 状态，推断断点：
 
 | PR 状态 | tasks.md status | 动作 |
 |---------|----------------|------|
-| Draft + open | review | **轮次 1**：审查 → 分形同步 → 本地 CI → `gh pr ready` |
-| Open + Ready + CI green | review | **跳过**（等 auto-merge 合并） |
-| Open + Ready + CI red | review | **回退**：`gh pr ready --undo` → 修复 → 重新 `gh pr ready` |
-| MERGED | review | **轮次 2**：verify → archive → backlog: done |
+| Draft + open | review | **完整闭环**：审查 → 分形同步 → 本地 CI → rebase → 合并 → verify → 归档 |
+| Open + Ready + checks green | review | 补执行 `gh pr merge --merge` → 继续 verify + 归档 |
+| Open + Ready + checks red | review | 回本地修复循环 → push → 重走 rebase 起 |
+| Open + Ready + checks pending，autoMergeRequest 非空 | review | 跳过（--auto 已挂起，等下一轮） |
+| Open + Ready + checks pending，autoMergeRequest 为空 | review | 恢复 Step 4 合并；即时合并被 required checks 拒绝时再启用 --auto |
+| MERGED | review | **恢复模式**：从 verify → 归档续跑 |
 | MERGED | done | **跳过**（已完成） |
 
 ## Step 1 — 发现待审查 Change
@@ -56,7 +56,7 @@ Review skill (Claude Code / Codex)      GitHub Actions / GitHub auto-merge
 
 如果没有，输出 "No changes ready for review."
 
-发现后，执行 `gh pr view <PR-number> --json state,isDraft,mergeStateStatus` 判断当前状态，进入对应路径。
+发现后，执行 `gh pr view <PR-number> --json state,isDraft,mergeStateStatus,statusCheckRollup,autoMergeRequest` 判断当前状态，进入对应路径。
 
 ## Step 2 — PR 审查
 
@@ -66,7 +66,7 @@ Review skill (Claude Code / Codex)      GitHub Actions / GitHub auto-merge
 |--------|------|
 | Spec 合规 | 实现匹配 design.md 文件清单和技术方案 |
 | Delta Specs 合规 | 实现覆盖 delta specs 中的 ADDED/MODIFIED 场景 |
-| 范围合规 | 只修改了 design.md 声明范围内的文件 |
+| 范围合规 | 实现文件匹配 design.md；change 四件套、tasks 状态与 pending-sync.md 作为治理产物单独校验 |
 | 测试通过 | CI 绿灯或本地 `pnpm test` |
 | 分形文档合规 | 新文件有头注释，新目录有 `_DIR.md` |
 | Change-ID | commit message 包含 `Change-ID: <change-id>` |
@@ -88,37 +88,21 @@ Review skill (Claude Code / Codex)      GitHub Actions / GitHub auto-merge
 | 结果 | 含义 | 处理 |
 |---|---|---|
 | ❌ 未命中（change 新建目录） | change 独占 | 本步 Step 3 在 feature branch 更新 |
-| ✅ 命中（main 已存在的共享 `_DIR.md`） | 跨 change 共享 | **推迟到 Step 6.1.5 在 main 上更新**，写入 `.logs/review/<change-id>.md` 的 "Step 6.1.5 待办" 段 |
+| ✅ 命中（main 已存在的共享 `_DIR.md`） | 跨 change 共享 | **推迟到归档阶段在 main 上更新**，待办追加到 `openspec/changes/<change-id>/pending-sync.md`（与 dispatch 共用通道，随 PR 合并进 main） |
 
 **Feature Branch 禁改清单（Step 3 强约束）：** core/AGENTS.md 的治理层清单中所有条目都不得在本步修改（backlog / roadmap / modules / 主 specs / project.md / changes/_DIR.md / main 共享 _DIR.md）。命中即写 STOP 日志，不做自动还原。
 
-## Step 3.8 — Rebase feature branch 到最新 main（强制）
-
-在 `gh pr ready` **前**必须 rebase，消除 auto-merge 阶段的冲突窗口：
-
-```bash
-git fetch origin main
-git checkout <branch-prefix>/<change-id>
-git rebase origin/main
-```
-
-**三种场景：**
-
-- **A 无冲突** → `git push --force-with-lease origin <branch>` → 远程 CI 重新运行；若可查询则等 CI 绿 → Step 4
-- **B change-owned 文件冲突**（design.md 与其他 change 范围重叠）→ STOP + 日志，提示用户回 `/design review M-NNN` 重排
-- **C 治理层文件冲突**（说明 dispatch/其他 skill 意外写了禁改清单）→ STOP + 日志，提示用户人工回滚
-
-> main 分支禁止任何 force 推送；**`--force-with-lease` 仅本步允许**（因为 rebase 后 feature branch 历史被重写）。
-
 ## Step 3.5 — 本地 CI 验证与自动修复
 
-在 `gh pr ready` 前，先在本地运行 CI 三件套并自动修复：
+在 `gh pr ready` 前，先在本地依次运行 CI 三件套并自动修复：
 
 ```bash
-pnpm test && pnpm lint && pnpm build
+pnpm test
+pnpm lint
+pnpm build
 ```
 
-**如果全部通过** → 进入 Step 4。
+**如果全部通过** → 进入 Step 3.8。
 
 **如果失败** → 进入自动修复循环（最多 2 轮）：
 
@@ -149,47 +133,55 @@ Round 2: 读取错误 → 分析 → 修复 → commit + push → 重新运行 C
 STOP: 写入日志，输出问题报告，等待人工决策
 ```
 
-## Step 4 — PR Ready（委托 Auto-Merge）
+## Step 3.8 — Rebase feature branch 到最新 main（强制）
 
-本地 CI 通过后，只执行 `gh pr ready`，**不直接 merge**：
+在合并**前**必须 rebase，消除 merge 阶段的冲突窗口：
 
 ```bash
-# Draft PR → Ready for Review
+git fetch origin main
+git checkout <branch-prefix>/<change-id>
+git rebase origin/main
+```
+
+**三种场景：**
+
+- **A 无冲突** → `git push --force-with-lease origin <branch>` → 远程 CI 重新触发（本地 CI 已绿，无需等待远程）→ Step 4
+- **B change-owned 文件冲突**（design.md 与其他 change 范围重叠）→ STOP + 日志，提示用户回 `/design review M-NNN` 重排
+- **C 治理层文件冲突**（说明 dispatch/其他 skill 意外写了禁改清单）→ STOP + 日志，提示用户人工回滚
+
+> main 分支禁止任何 force 推送；**`--force-with-lease` 仅本步允许**（因为 rebase 后 feature branch 历史被重写）。
+
+## Step 4 — 合并 PR（直接合并）
+
+本地 CI 通过 + 已 rebase 后，标记 Ready 并直接合并：
+
+```bash
 gh pr ready <PR-number>
+gh pr merge <PR-number> --merge
 ```
 
-`auto-merge.yml` GitHub Actions 会自动：
-1. 检测 `ready_for_review` 事件
-2. 执行 `gh pr merge --auto --merge`
-3. 由 GitHub 在 required checks 通过后执行 merge commit（保留完整历史）
+**合并策略：merge commit（`--merge`，等价 `--no-ff`）**，保留 feature branch 上的完整提交历史。合并成功后**同一轮继续** Step 5-7。
 
-若 workflow 缺失或未触发，review skill 兜底执行 `gh pr merge <PR-number> --auto --merge`；若仓库未开启 GitHub auto-merge，则 STOP 并提示先开启。
+### 兜底：仓库配置了 required checks
 
-**合并策略：merge commit（`--no-ff`）**，保留 feature branch 上的完整提交历史。
-
-### 异常兜底：远程 CI 失败
-
-如果 `gh pr ready` 后远程 CI 红灯：
+若即时合并因 checks 未跑完被拒：
 
 ```bash
-# 回退到 Draft 状态
-gh pr ready --undo <PR-number>
-
-# 在 feature branch 上修复 → commit + push
-# 重新进入 Step 3.5 本地 CI 验证
+gh pr merge <PR-number> --auto --merge   # GitHub 等 checks 绿后异步合并
 ```
 
-## Step 5 — 更新 main 上的治理层
+本轮对该 change 结束，下一轮 review 从 MERGED 状态续跑 verify + 归档。若 `--auto` 也失败（仓库未开启 auto-merge / 分支保护要求人工 review）→ STOP 并提示调整仓库设置。若兜底后 checks 红灯 → 下一轮回到 Step 3.5 本地修复循环。
 
-auto-merge 合并完成后（轮次 2 开始时），在 main 上更新：
+## Step 5 — Verify 前的 Main 一致性准备
+
+PR 合并完成后（同一轮内，或恢复模式进入时），在 main 上更新：
 
 1. 更新 `openspec/project.md` 的 Directory Structure（如有变化）
-2. 更新 `openspec/changes/_DIR.md` 索引表状态
-3. **Sync main-shared `_DIR.md`**（Step 3 推迟的待办）：读 `.logs/review/<change-id>.md` 的 "Step 6.1.5 待办" 段，对每条在 main 上更新对应 `_DIR.md`
+2. **Sync main-shared `_DIR.md`**（执行期推迟的待办）：读 `openspec/changes/<change-id>/pending-sync.md`（合并后已在 main 上），逐条更新对应 `_DIR.md`，完成一条勾选一条
 
 > 为什么迁移到 main：并发的多个 change 可能各自要在同一 `_DIR.md` 追加条目。feature branch 上改 → auto-merge 阶段相互冲突；main 上改 → 串行 + `git-safe-push` 协议按条目名主键合并，冲突自动化解。
 
-**推送走 `core/git-safe-push.md` 协议**（3 轮 pull-rebase-push + 分段冲突策略）。3 轮失败写 `.logs/review/<change-id>.md`。
+本步变更与 Verify / archive 结果一起在 Step 7 提交，避免中间状态单独落 main。`openspec/changes/_DIR.md` 在归档移动 change 时统一更新。
 
 ## Step 6 — Verify 三维度
 
@@ -241,7 +233,7 @@ auto-merge 合并完成后（轮次 2 开始时），在 main 上更新：
 ### 7.4 清理分支
 
 ```bash
-# 删除远程 feature branch（<branch-prefix> 由类型派生：feat/ | fix/ | chore/ | hotfix/）
+# 删除远程 feature branch（<branch-prefix> 由 type 映射：feat/ | fix/ | chore/ | hotfix/）
 git push origin --delete <branch-prefix>/<change-id>
 
 # 删除本地 feature branch
@@ -274,10 +266,9 @@ Day 1 10:15  下一轮 dispatch fetch 到 G0 代码，G1-A/G1-B 被并行领取
 Day 1 10:25  所有自动化任务完成，push 后 tasks.md status → review
 Day 1 10:26  CI 全绿，Draft PR 展示完整代码
 Day 1 10:30  用户触发 review（或 /loop 发现）
-Day 1 10:32  轮次 1：审查 + 分形同步 + 本地 CI 修复 + gh pr ready
-Day 1 10:33  auto-merge.yml：启用 --auto --merge，GitHub 等 CI 绿后 merge commit
-Day 1 10:35  轮次 2（/loop 下一轮发现 MERGED）：verify + archive → backlog: done
-Day 1 10:36  清理 feature branch
+Day 1 10:32  审查 + 分形同步 + 本地 CI 修复 + rebase + gh pr merge --merge
+Day 1 10:34  同一轮继续：verify + archive → backlog: done
+Day 1 10:35  清理 feature branch（单轮闭环完成）
 ```
 
 ## 下一步

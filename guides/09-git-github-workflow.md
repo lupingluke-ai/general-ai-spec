@@ -25,7 +25,7 @@ main ─────────────────────────
 - `prd-writer` 产出 `docs(PRD-NNN): ...` 直接落 main（PRD 是产品文档）
 - 两者不开 feature branch，也不走 PR（没有代码变更）
 
-> `change-propose` 校验 backlog / PRD type 与 change-id 派生 type 一致后，分支前缀由 change-id 字符串前缀派生：feature→`feat/`、bug→`fix/`、chore→`chore/`、hotfix→`hotfix/`。下文示例以 feature 为主（`feat/<change-id>`），其他类型把 `feat/` 替换为对应前缀即可。详见 [11-task-types.md](./11-task-types.md)。
+> 分支前缀由 backlog 的 type 直接映射：feature→`feat/`、bug→`fix/`、chore→`chore/`、hotfix→`hotfix/`（`change-propose` 另校验 change-id 命名前缀与 type 一致）。下文示例以 feature 为主（`feat/<change-id>`），其他类型把 `feat/` 替换为对应前缀即可。详见 [11-task-types.md](./11-task-types.md)。
 
 ---
 
@@ -41,13 +41,16 @@ main ─────────────────────────
                                           GitHub（事件驱动）:
 ② 用户 → Coding Agent:                     任何 push → CI 自动运行
      "review chat-ui-basic-route"           push → Draft PR 自动更新
-       → 审查 + 本地 CI 修复 + gh pr ready    Ready → auto-merge.yml 启用 auto-merge
-       → auto-merge → verify + archive
+       → 审查 + 本地 CI 修复 + rebase
+       → gh pr merge --merge（单轮闭环）
+       → verify + archive → backlog done
 ```
+
+> ② 也可配置为 `/loop <interval> /change-review` 全自动，无需人工开口。
 
 | 操作 | 触发方式 | 执行者 |
 |------|----------|--------|
-| 建模块 + 拆 idea + 写 roadmap AUTO 段 | 🙋 人工（/design） | 交互式 agent（Claude Code / Codex，module-designer） |
+| 建模块 + 拆 idea + 重渲染 roadmap AUTO 段 | 🙋 人工（/design） | 交互式 agent（Claude Code / Codex，module-designer） |
 | 写 PRD + 更新 backlog/exploring | 🙋 人工（/prd B-NNN） | 交互式 agent（Claude Code / Codex，prd-writer） |
 | 创建 feature branch | 🙋 人工（用户告知交互式 agent） | 交互式 agent |
 | push 四件套 + 创建 Draft PR | 🙋 人工 | 交互式 agent |
@@ -56,10 +59,8 @@ main ─────────────────────────
 | **实现代码 + push** | 🤖 自动 | change-dispatch |
 | Draft PR 内容更新 | 🤖 自动（push 触发） | GitHub |
 | CI 运行（test/lint/build） | 🤖 自动（push 触发） | GitHub Actions |
-| 审查 + 本地 CI 修复 + gh pr ready | 🙋 人工（轮次 1） | Coding Agent (change-review) |
-| 启用 auto-merge → required checks 绿后 merge | 🤖 自动（ready_for_review 触发） | GitHub Actions (auto-merge.yml) |
-| verify + archive | 🙋 人工（轮次 2，/loop 发现 MERGED） | Coding Agent (change-review) |
-| 删除 feature branch | 🙋 人工（归档时自动包含） | Coding Agent |
+| 审查 + 本地 CI 修复 + rebase + 合并 + verify + archive | 🙋 人工 / 🤖 `/loop`（单轮闭环） | Coding Agent (change-review) |
+| 删除 feature branch | 🤖 自动（归档时包含） | Coding Agent |
 
 ---
 
@@ -174,15 +175,11 @@ dispatch push
 
 ---
 
-### Stage 3 — 收尾：Review + Auto-Merge + Archive（两轮模式）
+### Stage 3 — 收尾：Review + Merge + Archive（单轮闭环）
 
-**轮次 1 执行者：Coding Agent (change-review skill)** | **分支：`<branch-prefix>/<change-id>`**
-**合并执行者：GitHub Actions (auto-merge.yml)** | **触发：ready_for_review**
-**轮次 2 执行者：Coding Agent (change-review skill)** | **分支：main**
+**执行者：Coding Agent (change-review skill)** | **一次调用走完审查 → 合并 → verify → 归档**
 
 ```bash
-# ══ 轮次 1 ══
-
 # ── 1. 发现待审查 change ──
 gh pr list --state open --draft                        # 方式 A: PR 列表
 git fetch origin feat/<change-id>                      # 方式 B: 直接 fetch
@@ -193,8 +190,8 @@ git checkout feat/<change-id> && git pull
 # 逐项检查 spec 合规、范围合规、测试、分形文档
 # 可自动修复的问题直接修复，不可修复的 STOP
 
-# ── 3. 分形文档同步（在 feature branch 上）──
-# 补充 _DIR.md、头注释，更新 tasks.md 中 interactive 任务组状态
+# ── 3. 分形文档同步（在 feature branch 上，仅 change 独占部分）──
+# 补充 change 新建目录的 _DIR.md、头注释；main 共享 _DIR.md 待办写进 pending-sync.md
 git add -A
 git commit -m "chore(<change-id>): fractal documentation sync
 
@@ -203,26 +200,28 @@ git push origin feat/<change-id>
 
 # ── 3.5 本地 CI 验证 + 自动修复（最多 2 轮）──
 pnpm test && pnpm lint && pnpm build
-# 失败 → 分析错误 → 修复 → commit + push → 重试
-# 2 轮仍失败 → STOP
+# 失败 → 分析错误 → 修复 → commit + push → 重试；2 轮仍失败 → STOP
 
-# ── 4. PR Ready（委托 auto-merge）──
+# ── 3.8 rebase 到最新 main ──
+git fetch origin main
+git rebase origin/main
+git push --force-with-lease origin feat/<change-id>
+
+# ── 4. 合并（直接）──
 gh pr ready <pr-number>
-# 不直接 merge！auto-merge.yml 负责启用 GitHub auto-merge
+gh pr merge <pr-number> --merge
+# 兜底：若仓库配置 required checks 导致即时合并被拒 → gh pr merge --auto --merge
+#       本轮结束，下一轮从 MERGED 恢复续跑
 
-# ══ auto-merge.yml 自动执行 ══
-# gh pr merge --auto --merge                          # required checks 绿后 merge commit
-
-# ══ 轮次 2（/loop 下一轮发现 MERGED）══
-
-# ── 5. Verify 三维度（在 main 上）──
+# ── 5. Verify 三维度（在 main 上，同一轮继续）──
 git checkout main && git pull origin main
 # Completeness + Correctness + Coherence
+# 消费 openspec/changes/<change-id>/pending-sync.md，同步 main 共享 _DIR.md
 
 # ── 6. 归档 + 清理 ──
 # sync delta specs → openspec/specs/
-# 移动 change → archive/
-# 更新 backlog → done
+# 移动 change → archive/（含 pending-sync.md）
+# 更新 backlog → done；重渲染 roadmap AUTO 段
 git add -A
 git commit -m "chore(<change-id>): archive change and sync specs"
 git push origin main
@@ -253,18 +252,17 @@ T+interval 🤖 change-dispatch  fetch + checkout + pull             —
          🤖  GitHub CI        (push 触发)                          CI 运行
 ──────────────────────────────────────────────────────────────────────────────
 T+30min  🙋  Coding Agent     fetch + checkout + pull             —
-              (review skill)  审查 PR + 分形同步 → commit + push   PR 更新（轮次 1）
+              (review skill)  审查 PR + 分形同步 → commit + push   PR 更新
               Coding Agent    本地 CI 验证 + 自动修复              确保构建通过
-              Coding Agent    gh pr ready                          PR → Ready
-         🤖  auto-merge.yml  gh pr merge --auto --merge            启用 auto-merge
-              GitHub         required checks 绿后 merge commit      merge → main
-──────────────────────────────────────────────────────────────────────────────
-T+40min  🤖  Coding Agent     检测 MERGED（轮次 2）               —
-              (review skill)  checkout main + verify               三维度验证
+              Coding Agent    rebase origin/main + force-with-lease 消除合并冲突窗口
+              Coding Agent    gh pr ready + gh pr merge --merge     merge → main
+              Coding Agent    checkout main + verify（同一轮）      三维度验证
               Coding Agent    归档 → commit + push main            backlog: done
               Coding Agent    push origin --delete feat/X          branch 删除
 ──────────────────────────────────────────────────────────────────────────────
 ```
+
+> 兜底：仅当仓库配置 required checks 时，`gh pr merge --merge` 退化为 `--auto --merge`，合并与 verify/archive 分到两次 review 调用（下一次扫描 MERGED 续跑）。
 
 ---
 
@@ -281,10 +279,10 @@ feat/<change-id>    [created] ──push──→ [remote + Draft PR]
                                               ▼
                                      [PR 更新 + CI 运行]
                                               │
-                                     Coding Agent 审查 + 分形同步 + 本地 CI 修复 + push
+                                     Coding Agent 审查 + 分形同步 + 本地 CI 修复 + rebase
                                               │
                                               ▼
-                                     [gh pr ready → auto-merge → verify → archive]
+                                     [gh pr merge --merge → verify → archive]（单轮闭环）
                                               │
                                               ▼
 feat/<change-id>                      [deleted] ✂️
@@ -318,9 +316,9 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 |------|------|------|
 | dispatch push 被拒 (non-fast-forward) | 并行任务组或交互式 agent 先 push 了 | `git pull --rebase` 后重试（feature branch） |
 | main push 被拒 (non-fast-forward) | 并发 push | 走 `core/git-safe-push.md`（3 轮 pull-rebase-push）；3 轮失败 STOP |
-| auto-merge 合并时冲突 | feature branch 基线滞后 / 治理层被误写 | `gh pr ready --undo` → Step 3.8 rebase origin/main（force-with-lease）→ 重新 `gh pr ready` |
+| 合并时冲突 | feature branch 基线滞后 / 治理层被误写 | Step 3.8 先 rebase origin/main（force-with-lease）再合并；治理层冲突 STOP |
 | CI 失败 | 代码问题 | dispatch 标记 `[NEEDS-FIX]`，交互式 agent review 时修复 |
-| `gh pr merge` 失败 | PR 还是 Draft 状态 | 先 `gh pr ready <number>` |
+| `gh pr merge` 失败 | PR 还是 Draft / required checks 未过 | 先 `gh pr ready`；required checks 场景改用 `--auto --merge` 兜底 |
 | worktree 锁定分支 | 上一轮 dispatch 未清理 worktree | `git worktree remove --force <path>` |
 | feature branch 不存在 | 交互式 agent 尚未 push | dispatch 跳过，等下一轮 |
 | `pnpm install` 失败 | 网络或 registry 问题 | 重试，或检查 Network 配置 |
@@ -331,13 +329,13 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 
 1. **dispatch 永远不碰 main** — 只在 feature branch 上 commit + push
 2. **Backlog 只由交互式 agent（Claude Code / Codex）在 main 上更新** — dispatch 不修改治理层
-3. **Merge 策略固定为 merge commit** — `gh pr merge --auto --merge` 启用后由 GitHub 以 merge commit 合并（`--no-ff`）
+3. **Merge 策略固定为 merge commit** — `change-review` 用 `gh pr merge --merge`（`--no-ff`）；仅 required checks 场景退化为 `--auto --merge`
 4. **一个 change 一个 branch** — 所有任务组（G0/G1-A/G1-B/G2）在同一个 `<branch-prefix>/<change-id>` 分支上（G 是任务组逻辑标签，不是分支名）
 5. **PR = 方案 + 代码** — Draft PR 从规划阶段就存在，贯穿整个生命周期
 6. **设计层 / 产品层不开 feature branch** — `module-designer`、`prd-writer` 直接向 main 提交（design / docs 前缀）
 7. **push main 走 `core/git-safe-push.md` 协议** — 3 轮 pull-rebase-push + 分段冲突策略（见下）
-8. **Rebase-before-ready** — `change-review` 在 `gh pr ready` 前必须 rebase feature branch 到最新 main（消除 auto-merge 阶段冲突窗口）
-9. **main 禁止任何 force 推送** — `--force-with-lease` 仅 `change-review` Step 3.8 rebase-before-ready 允许
+8. **Rebase-before-merge** — `change-review` 在合并前必须 rebase feature branch 到最新 main（消除合并冲突窗口）
+9. **main 禁止任何 force 推送** — `--force-with-lease` 仅 `change-review` Step 3.8 rebase-before-merge 允许
 
 ---
 
@@ -345,18 +343,19 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 
 ```
 类型 1  feature branch 写了 main 共享文件（治理层）
-       → 多 change 各自修改 → auto-merge 阶段物理行冲突
+       → 多 change 各自修改 → 合并阶段物理行冲突
        → 防护：Feature Branch 治理层禁改清单（见 core/AGENTS.md）
               dispatch D1 / review R1 双检查点拦截；Step 3 只处理 change-owned 分形文档
+              main 共享 _DIR.md 待办走 pending-sync.md，归档时在 main 串行消费
 
 类型 2  同一 main 文件被并发 push（多 runner 叠加：/loop + Codex Automation + 人工）
        → 第二个 push 被拒（non-fast-forward）
        → 防护：core/git-safe-push.md — 3 轮 pull-rebase-push，
-              按文件类型（backlog / roadmap AUTO / modules）主键合并
+              backlog 按 B-NNN 主键合并；roadmap AUTO 段冲突后从 backlog+modules 全量重渲染
 
-类型 3  auto-merge 阶段 main 又前进了（别的 change 先合并）
+类型 3  合并前 main 又前进了（别的 change 先合并）
        → base 改变，PR 变成"需要更新"
-       → 防护：Step 3.8 rebase-before-ready，gh pr ready 前强制 rebase
+       → 防护：Step 3.8 rebase-before-merge，合并前强制 rebase
               origin/main + force-with-lease feature branch
 ```
 
@@ -398,4 +397,4 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 - `Change-ID: <change-id>` — change 层 commit 必含
 - `PRD-Status` / `Backlog-Stage` — 状态跃迁类 commit 额外记录
 
-> `<type>` 在 `change-propose` 完成一致性校验后从 change-id 前缀派生：`feat`（默认）/ `fix`（hotfix-/fix-）/ `chore`（chore-），与 PR title / branch 前缀保持一致。
+> `<type>` 由 backlog 类型列直接映射：`feat`（feature）/ `fix`（bug、hotfix）/ `chore`（chore），与 PR title / branch 前缀保持一致。

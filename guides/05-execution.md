@@ -59,7 +59,7 @@ change-dispatch 启动
   ↓
 Step 1: 从 main 的 backlog.md 扫描活跃 change
   → 筛选阶段为 proposed（执行细粒度由 tasks.md YAML status 承担）
-  → 从 change-id 前缀派生 branch-prefix（feat/ | fix/ | chore/ | hotfix/）
+  → 读同行"类型"列得到 type，映射 branch-prefix（feat/ | fix/ | chore/ | hotfix/）
   → 推导 feature branch: <branch-prefix>/<change-id>
   ↓
 Step 2: fetch 并读取 feature branch 上的 tasks.md
@@ -67,6 +67,7 @@ Step 2: fetch 并读取 feature branch 上的 tasks.md
   → git show origin/<branch-prefix>/<change-id>:openspec/changes/<change-id>/tasks.md
   → 筛选 status: ready 或 executing
   → 检查 depends-on 前置 change 是否都 done
+  → 收敛检查（幂等）：所有 auto 组已 done 但 YAML 仍 executing → 推进为 review
   ↓
 Step 3: 选择任务组
   → 找第一个 status: pending 的自动化任务组（`执行模式: auto`）
@@ -84,17 +85,18 @@ Step 5: 执行任务
   → 逐项实现 checkbox 任务
   ↓
 Step 6: 范围校验
-  → git diff --name-only 与 design.md 文件清单对比
+  → git diff --name-only 排除 pending-sync.md 后与 design.md 文件清单对比
+  → pending-sync.md 的每条待办单独验证可追溯到 design.md
   → 确保无超范围文件（超范围 → STOP）
   ↓
 Step 7: 更新状态、提交并推送
-  → 勾选对应 checkbox
-  → 任务组 status: executing → done
-  → 如果所有自动化组完成: change status → review
+  → 先 git pull --rebase 拉齐并行状态
+  → 基于 rebase 后的 tasks.md 勾选 checkbox、任务组 status: executing → done
+  → 如果此刻所有自动化组完成: change status → review
   → git commit + git push origin <branch-prefix>/<change-id>
 ```
 
-> `change-propose` 校验 backlog / PRD type 与 change-id 派生 type 一致后，`<branch-prefix>` 由 change-id 字符串前缀派生：`hotfix-` → `hotfix/`、`chore-` → `chore/`、`fix-` → `fix/`（严格 4 字符）、其余 → `feat/`。详见 [11-task-types.md](./11-task-types.md)。
+> type 事实源是 backlog 的"类型"列（dispatch 扫描时同行直接读到），`<branch-prefix>` 由 type 映射：feature → `feat/`、bug → `fix/`、chore → `chore/`、hotfix → `hotfix/`。change-id 的命名前缀由 prd-writer 生成、propose 校验，dispatch 不做字符串反解析。详见 [11-task-types.md](./11-task-types.md)。
 
 ### dispatch push 后的自动效果
 
@@ -114,6 +116,7 @@ G1-A ∥ G1-B ∥ G1-C  (并行，各自 worktree，push 时 rebase 解决冲突
 
 - **同一 change 的串行组**：按顺序领取（G0 先于 G1）
 - **同一 change 的并行组**：可被同一轮次的不同 runner 实例领取，各自 worktree 隔离
+- **同机并发必须用 worktree**：同一工作目录并发运行多个 dispatch 实例会互相破坏工作区；无 worktree 时同机同一时刻只跑一个实例（worktree 命令见 `skills/change-dispatch/SKILL.md` 的「并发与隔离」）
 - **不同 change**：完全隔离（不同 feature branch），可同时执行
 - **所有任务组在同一个 `<branch-prefix>/<change-id>` 分支上提交**
 - **Push 冲突**：通过 `git pull --rebase` 解决
@@ -127,7 +130,7 @@ G1-A ∥ G1-B ∥ G1-C  (并行，各自 worktree，push 时 rebase 解决冲突
 3. **新建文件** — 必须包含 `@input/@output/@pos` 头注释
 4. **新建目录** — 必须包含 `_DIR.md`
 5. **Commit message** — 必须包含 `Change-ID: <change-id>`
-6. **更新 _DIR.md** — 创建新文件时，必须同时更新该目录已有的 `_DIR.md`，添加新文件条目
+6. **更新 _DIR.md** — 创建新文件时，change 独占目录的 `_DIR.md` 直接追加条目；main 共享的 `_DIR.md` 不改，把待办写进 `openspec/changes/<change-id>/pending-sync.md`（由 change-review 归档阶段在 main 上消费）
 7. **完成后直接 push** — 推送到 feature branch
 
 ## 状态更新时机
@@ -161,8 +164,7 @@ G1-A ∥ G1-B ∥ G1-C  (并行，各自 worktree，push 时 rebase 解决冲突
 如果某个任务组执行失败：
 
 - Runner 日志中会显示错误
-- 该任务组的 status 保持 `pending` 或 `executing`
-- 下一轮 runner 会重新尝试
+- STOP 级失败时 runner 会尽力把该任务组 `executing → pending` 释放（释放失败由 30 分钟 stale 回收兜底），下一轮即可重新领取
 - 如果代码已提交但有问题，commit message 会包含 `[NEEDS-FIX]` 标记
 
 ### 依赖未满足

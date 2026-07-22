@@ -1,0 +1,32 @@
+name: CI
+
+# 流水线的质量闸门：dispatch 每次 push、review 合并前的 PR 都会触发。
+# change-review 在本地跑同样的三件套；本 workflow 提供远端第二道保障，
+# 并可在仓库设置中被配置为 required check（配合 branch protection 后，
+# change-review 的即时合并会自动退化为 gh pr merge --auto，等 checks 绿后合并）。
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - main
+      - 'feat/**'
+      - 'fix/**'
+      - 'chore/**'
+      - 'hotfix/**'
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g pnpm@10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm lint
+      - run: pnpm build

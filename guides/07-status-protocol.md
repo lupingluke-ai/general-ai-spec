@@ -81,13 +81,13 @@ depends-on: []               # 无前置依赖
 
 ### change-id 字段（PRD）
 
-PRD YAML 头中预定义的 change-id，用于 feature branch 命名 `<branch-prefix>/<change-id>`（前缀由类型派生，见 [11-task-types.md](./11-task-types.md)）。
+PRD YAML 头中预定义的 change-id，用于 feature branch 命名 `<branch-prefix>/<change-id>`（branch 前缀由 type 直接映射，见 [11-task-types.md](./11-task-types.md)）。
 
 ```yaml
 change-id: ai-voice-entry
 ```
 
-此字段由 PRD 作者在编写时指定，change-propose 不自动生成。
+此字段由 `prd-writer` 在生成 PRD 时按 type 前缀规则产出（feature 无前缀 / bug `fix-` / chore `chore-` / hotfix `hotfix-`），全局唯一；`change-propose` 校验前缀与 type 一致，但不生成它。dispatch / review 不从中反解析 type（type 直接读 backlog 类型列）。
 
 ---
 
@@ -135,9 +135,9 @@ idea ──→ exploring ──→ proposed ────────────
 
 细粒度见 tasks.md YAML status：
 draft → ready → executing → review → done
-            │         │         │       │
-        propose   dispatch   review   review
-                  (领取)      (轮 1)   (轮 2)
+            │         │          │        │
+        propose   dispatch    dispatch   review
+                  (领取)   (收敛全done) (合并+归档)
 ```
 
 ### 任务组维度
