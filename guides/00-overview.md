@@ -12,7 +12,7 @@ L3 product/prd/           ← PRD-NNN（引用 module 文档 + design-inputs）
 L4 openspec/changes/      ← 四件套 + feature branch + Draft PR
 ```
 
-全景映射沉淀在 `design/roadmap.md`（AUTO 段：ARCHITECTURE / DEPENDENCIES / PROGRESS 实时同步）。
+全景映射沉淀在 `design/roadmap.md`（AUTO 段：ARCHITECTURE / DEPENDENCIES / PROGRESS 从 backlog + modules 全量重渲染）。
 
 ## 流水线
 
@@ -71,9 +71,9 @@ designer  (PRD)     (四件套 + Draft PR)              (归档 + verify)
 
 执行细粒度（tasks.md YAML status，change 独占，dispatch 禁碰 main）：
 draft → ready → executing → review → done
-          │         │          │       │
-      propose   dispatch    review   review
-                 (领取)      (轮 1)   (轮 2)
+          │         │          │        │
+      propose   dispatch    dispatch   review
+                 (领取)   (收敛全done) (合并+归档)
 ```
 
 ## 模块状态流转

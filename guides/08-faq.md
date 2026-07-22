@@ -225,19 +225,19 @@ change 的 specs/ai-voice.md 中的 REMOVED Requirements
 
 ## Git / 并发
 
-### Q: Review 结束后 auto-merge 阶段远端仓库出现冲突，怎么办？
+### Q: Review 合并阶段远端仓库出现冲突，怎么办？
 
 典型根因是三类中的一种（见 [09-git-github-workflow.md](./09-git-github-workflow.md) "三类冲突"）：
 
-1. **feature branch 写到 main 共享文件**（`product/backlog.md` / `design/roadmap.md` / `openspec/specs/**` / 主 `_DIR.md` 等）→ 两个 change 在各自 feature branch 都改同一段 → auto-merge 两次合并时物理冲突
-2. **auto-merge 期间 main 又前进了**（别的 change 先合并）→ 当前 PR 的 base 过期 → GitHub 标记 "需要更新"
+1. **feature branch 写到 main 共享文件**（`product/backlog.md` / `design/roadmap.md` / `openspec/specs/**` / 主 `_DIR.md` 等）→ 两个 change 在各自 feature branch 都改同一段 → 合并时物理冲突
+2. **合并前 main 又前进了**（别的 change 先合并）→ 当前 PR 的 base 过期 → GitHub 标记 "需要更新"
 3. **多个 skill 并发 push main**（定时 propose + 定时 review + 任意 dispatch runner + 人工）→ 第二个被拒 (non-fast-forward)
 
 当前版本已经把三类全部系统化防住：
 
-- 类型 1 → `core/AGENTS.md` 的 "Feature Branch 治理层禁改清单" + `change-review` Step 3 只处理 change-owned 分形文档 + dispatch D1 / review R1 双检查点
-- 类型 2 → `change-review` Step 3.8 rebase-before-ready（`gh pr ready` 前强制 rebase `origin/main`，force-with-lease push）
-- 类型 3 → `core/git-safe-push.md`（3 轮 pull-rebase-push + 分段冲突策略；主 specs 冲突 → STOP）
+- 类型 1 → `core/AGENTS.md` 的 "Feature Branch 治理层禁改清单" + `change-review` Step 3 只处理 change-owned 分形文档 + dispatch D1 / review R1 双检查点 + main 共享 `_DIR.md` 走 `pending-sync.md` 在 main 串行消费
+- 类型 2 → `change-review` Step 3.8 rebase-before-merge（合并前强制 rebase `origin/main`，force-with-lease push）
+- 类型 3 → `core/git-safe-push.md`（3 轮 pull-rebase-push + 分段冲突策略；roadmap AUTO 段冲突后全量重渲染；主 specs 冲突 → STOP）
 
 遇到冲突时按 `.logs/review/<change-id>.md` 的 STOP 日志判断类型：
 - 治理违规 → 人工回滚该 commit（禁改清单说明之）
@@ -248,7 +248,7 @@ change 的 specs/ai-voice.md 中的 REMOVED Requirements
 
 main 是协作基线：force push 会丢掉其他人已经合并的提交，且多个 skill + /loop 并发时会随机覆盖彼此的更新。
 
-feature branch 的 force-with-lease 仅在 `change-review` Step 3.8 rebase-before-ready 允许——rebase 改写了 feature branch 历史但没有丢任何人的工作（所有合并都尚未发生）。且 `--force-with-lease` 会在远端有新提交时失败，防止误覆盖。
+feature branch 的 force-with-lease 仅在 `change-review` Step 3.8 rebase-before-merge 允许——rebase 改写了 feature branch 历史但没有丢任何人的工作（所有合并都尚未发生）。且 `--force-with-lease` 会在远端有新提交时失败，防止误覆盖。
 
 其他时候（dispatch push / 交互式 agent 分形 sync push）都用普通 push + `git pull --rebase`。
 
@@ -279,7 +279,7 @@ feature branch 的 force-with-lease 仅在 `change-review` Step 3.8 rebase-befor
 | `design/inputs/**` | 人工（原始灵感，永久保留） |
 | `design/_DIR.md` / `design/modules/_DIR.md` / `design/inputs/_DIR.md` | 人工（偶尔更新） |
 | `design/roadmap.md` 人工段（愿景 / 原则 / 里程碑） | 人工 |
-| `design/roadmap.md` AUTO 段（ARCHITECTURE / DEPENDENCIES / PROGRESS） | AI（多 skill 按责任行各自维护，勿手改）|
+| `design/roadmap.md` AUTO 段（ARCHITECTURE / DEPENDENCIES / PROGRESS） | AI（从 backlog + modules 全量重渲染，勿手改）|
 | `design/modules/M-NNN-*.md`（frontmatter / 人工段） | AI（module-designer 主写） |
 | `design/modules/M-NNN-*.md`（## 关联 Backlog / ## 修订历史） | AI（多 skill 追加自己的行） |
 | `product/backlog.md` 需求内容 + 模块列 + type 列 | AI（module-designer 建行）/ 人工（补录） |

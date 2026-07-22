@@ -6,7 +6,7 @@ module-ref: M-NNN         # 必填；与 backlog 条目的"模块"列一致；�
 status: draft
 created: YYYY-MM-DD
 depends-on: []            # 前置 backlog 依赖，如 [B-001, B-002]，无则 []
-change-id: kebab-case     # 预定义的 change-id，feature 类型无前缀，如 chat-ui-basic-route
+change-id: kebab-case     # 由 prd-writer 按类型前缀规则生成（feature 无前缀 / bug fix- / chore chore- / hotfix hotfix-），全局唯一，禁止保留占位符
 design-inputs:            # 必填；prd-writer 必读这些路径作为产品语境
   - design/modules/M-NNN-<slug>.md          # 模块设计文档（必引）
   # - design/inputs/brainstorming/<name>.md  # 追加的原始输入（可选）

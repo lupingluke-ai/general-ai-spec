@@ -7,7 +7,7 @@ description: Interactive AI skill (Claude Code or Codex) for designing product m
 
 ## Overview
 
-把"模块设计"和"idea 拆分"合并到一次对话里完成。读设计输入（brainstorming / figma / 访谈）→ 与用户在对话收敛模块边界 → 自动拆分为 N 条 backlog idea（每条自动建议 type）→ 生成 module 文档 + 写入 backlog → 实时同步 roadmap。
+把"模块设计"和"idea 拆分"合并到一次对话里完成。读设计输入（brainstorming / figma / 访谈）→ 与用户在对话收敛模块边界 → 自动拆分为 N 条 backlog idea（每条自动建议 type）→ 生成 module 文档 + 写入 backlog → 全量重渲染 roadmap。
 
 **职责边界：** 只负责 L0→L1→L2 的设计层工作。PRD 生成由 `prd-writer`，技术规划由 `change-propose`，执行/审查由 `change-dispatch` / `change-review`。
 
@@ -183,7 +183,8 @@ M-NNN <模块名> (status: planning)
 从 `templates/module.md.tmpl` 派生：
 - frontmatter：`id` / `slug` / `status` / `depends-on` / `design-inputs`（至少引用 Phase 2 实际读取的 inputs）
 - `## 关联 Backlog` 小节：按 B-NNN 顺序列出本 /design 拆出的所有 idea，并保留 backlog 级依赖
-  - 格式：`- B-NNN <需求描述> [idea] [depends-on: B-XXX, B-YYY | none]`
+  - 格式：`- B-NNN <需求描述> [depends-on: B-XXX, B-YYY | none]`
+  - **不携带阶段标签**——阶段唯一存于 `product/backlog.md`，本小节只维护"归属关系 + 依赖"
 - `## 拆分理由`：简要记录对话关键考虑（为什么拆成这 N 条、依赖关系为何如此）
 - `## 修订历史`：首行写 `YYYY-MM-DD | 首次创建 | module-designer`
 
@@ -214,29 +215,25 @@ M-NNN <模块名> (status: planning)
 
 ---
 
-## Phase 5 — 实时更新 design/roadmap.md
+## Phase 5 — 重渲染 design/roadmap.md AUTO 段
 
-**三段 AUTO 区独立替换**，用 markdown 注释边界精确定位，不动人工段：
+**三段 AUTO 区全部从事实源全量重渲染**（渲染规则见 `core/git-safe-push.md` 的"AUTO 段重渲染"；所有写 main 状态的 skill 使用同一规则），用 markdown 注释边界精确定位，不动人工段：
 
 ### 5.1 AUTO:ARCHITECTURE
 
 位于 `<!-- AUTO:ARCHITECTURE_START -->` 和 `<!-- AUTO:ARCHITECTURE_END -->` 之间。
 
-**操作：**
-- 新建模式 → append 一行
-- 增量 / review 模式 → 找到对应 `M-NNN` 行替换
-
-行格式：
+遍历 `design/modules/*.md` 的 frontmatter，整段重写为模块表。行格式：
 
 ```markdown
-| M-NNN | <模块名> | <status> | [M-NNN](./modules/M-NNN-<slug>.md) | <depends-on 列表> | YYYY-MM-DD |
+| M-NNN | <模块名> | <status> | [M-NNN](./modules/M-NNN-<slug>.md) | <depends-on 列表> | <created> |
 ```
 
 ### 5.2 AUTO:DEPENDENCIES
 
 位于 `<!-- AUTO:DEPENDENCIES_START -->` 和 `<!-- AUTO:DEPENDENCIES_END -->` 之间。
 
-整段重写为邻接表（不是 diff append，整块替换，保证权威）：
+由各模块 frontmatter 的 `depends-on` 整段重写为邻接表：
 
 ```
 M-001 → (无)
@@ -249,7 +246,7 @@ M-004 → M-002, M-003
 
 位于 `<!-- AUTO:PROGRESS_START -->` 和 `<!-- AUTO:PROGRESS_END -->` 之间。
 
-按模块分节重写（整块替换，非 append）。每条 backlog 一行，格式：
+遍历 `product/backlog.md`，按模块分节整段重写。每条 backlog 一行，格式：
 
 ```markdown
 ### M-NNN <模块名>
@@ -258,11 +255,9 @@ M-004 → M-002, M-003
 ...
 ```
 
-阶段图标：`💡 idea | 🔎 exploring | 📝 proposed | ✅ done`（backlog 4 阶段；执行细粒度看 tasks.md status）
+阶段图标按 backlog 阶段列映射：`💡 idea | 🔎 exploring | 📝 proposed | ✅ done`（backlog 4 阶段；执行细粒度看 tasks.md status）
 
-**只新建 / 维护 idea 行。已有 exploring / proposed / done 行由 `prd-writer` / `change-propose` / `change-review` 负责更新，本 skill 原样保留。** 本 skill 负责"新增 idea 行"的部分，不碰下游阶段行。
-
-> **并发写入约定：** 本 skill 读取 AUTO:PROGRESS 全量 → 仅修改/追加自己负责的 idea 行 → 写回。遇到其他阶段的行原样保留。
+> **重渲染即幂等**：AUTO 段是 backlog + modules 的派生视图，不存储独立状态。无需"每个 skill 只改自己那行"的行级并发约定——并发冲突时任取一侧后重新渲染即可（见 git-safe-push）。
 
 ---
 
@@ -279,7 +274,7 @@ Phase 5 完成后、Commit 前，**必须**执行以下交叉验证。
 | P3 | 模块依赖无环 | 构建邻接表做拓扑排序 | 硬偏离 |
 | P4 | 每条新建 idea 至少可追溯到一个 `design-inputs` 路径 | 对比 Phase 2 读到的输入 | 范围偏离 |
 | P5 | `## 关联 Backlog` 的 B-NNN 列表 = `product/backlog.md` 中该模块下本次新增的 B-NNN 集合 | 两处集合对比 | 一致性偏离 |
-| P6 | AUTO:PROGRESS 段中本次新增 B-NNN / 当前 M-NNN 的 idea 行 = backlog 中对应行 | 仅对本次新增 B-NNN 集合或当前模块 M-NNN 做两处集合比对，不全局扫描其他模块 idea | 一致性偏离 |
+| P6 | 重渲染后的 AUTO:PROGRESS 段与 backlog 全量一致（每条 B-NNN 一行、图标与阶段列匹配） | 渲染结果与 backlog 逐行比对（渲染是全量的，可直接全局比对） | 一致性偏离 |
 | P7 | 每条新建 idea 的 `depends-on` 对话结果已写入 module `## 关联 Backlog` 行尾 | 对比 Phase 3.4 确认结果与 module 行尾 `[depends-on: ...]` | 一致性偏离 |
 
 **偏离处理：**
@@ -316,11 +311,19 @@ git push origin main
 # 被拒 → git pull --rebase origin main → 回到 push
 # rebase 冲突：
 #   - product/backlog.md 新增行冲突（多 skill 同时落 idea）→ 按 B-NNN 升序合并
-#   - design/roadmap.md AUTO:ARCHITECTURE / DEPENDENCIES / PROGRESS → 按 M-NNN / B-NNN 主键合并
+#   - design/roadmap.md AUTO 段 → 任取一侧后从 backlog + modules 全量重渲染
 #   - design/modules/*.md 同模块并发编辑 → frontmatter status 取新、关联 Backlog / 修订历史按主键合并
 #   - 模块边界 / 技术选型段冲突 → STOP + 日志（需用户确认设计意图）
 # 3 轮仍失败 → STOP，写日志到 .logs/module-designer/M-NNN.md
 ```
+
+**编号碰撞防护（每轮 rebase 后必须执行）：** 并发的两个 `/design` 会话可能各自基于同一快照分配相同的 M-NNN / B-NNN（行级合并不会将其识别为冲突，会导致同号双义）。每轮 `git pull --rebase` 成功后、重试 push 前：
+
+1. 重扫远端合入的 `design/modules/` 与 `product/backlog.md`
+2. 若本次分配的任一 M-NNN / B-NNN 已被**不同内容**的条目占用 → 本侧全部顺移重编号（新 max +1 起），同步更新：module 文档（含文件名）、backlog 行、roadmap 渲染，**以及所有指向被重编号 ID 的引用**（module `## 关联 Backlog` 行尾 `[depends-on: B-XXX]`、idea 之间的依赖关系）
+3. 写 WARN 日志（类型：编号碰撞重编）→ 重试 push
+
+> PRD-NNN 与 B-NNN 一一映射、change-id 由 prd-writer 生成并做唯一性检查，因此编号防护只需覆盖 M/B 两个分配点。
 
 > commit 首词用 `design`（与 `feat|fix|chore|docs` 并列，语义为"设计层变更"）。
 

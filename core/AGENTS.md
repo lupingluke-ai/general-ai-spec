@@ -66,7 +66,8 @@ PRD approved 后，`change-propose`、dispatch runner 与 `change-review` 可按
 ## Artifact Contract
 
 - **任务类型与命名**：feature / bug / chore / hotfix 走同一流程；branch、commit、PR title、PRD 模板与 trailer 以 `openspec/config.yaml` 的 `task-types` 为准。
-- **Change 四件套**：每个 change 必须包含 `proposal.md` + `specs/` delta + `design.md` + `tasks.md` + `_DIR.md`；delta 语义遵循 OpenSpec 官方 skills / commands。
+- **Change 四件套**：每个 change 必须包含 `proposal.md` + `specs/` delta + `design.md` + `tasks.md` + `_DIR.md`；delta 语义遵循 OpenSpec 官方 skills / commands。执行期推迟的 main 共享 `_DIR.md` 更新记录在 change 目录的 `pending-sync.md`（change-owned，随分支合并流转），由 `change-review` 归档阶段在 main 上消费。
+- **状态唯一源**：backlog 阶段唯一存于 `product/backlog.md`；`design/roadmap.md` 的 AUTO 段是从 backlog + modules 全量重渲染的派生视图，模块文档 `## 关联 Backlog` 行不携带阶段标签。
 - **分形文档同步**：创建或修改文件时同步维护文件头、所在目录 `_DIR.md`；新建目录必须有 `_DIR.md`；顶层结构变化更新 `openspec/project.md`。
 - **日志协议**：自动化 skill 遇到 STOP / WARN 必须写 `.logs/<skill>/<artifact-id>.md`；scope 与格式以各 `SKILL.md` 和 `.logs/_DIR.md` 为准。
 

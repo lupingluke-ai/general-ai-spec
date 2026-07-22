@@ -16,7 +16,7 @@
 #   6. 创建 product/ 目录（backlog.md + _DIR.md）
 #   7. 创建 design/ 目录（roadmap.md + inputs/ + modules/，module-designer 消费）
 #   8. 创建 .logs/ 目录（执行日志基础设施）
-#   9. 创建 GitHub workflow（auto-merge）
+#   9. 创建 GitHub workflow（ci: test/lint/build）
 #  10. 配置 .gitignore
 #  11. 运行 stacks/<name>/scaffold.sh（安装依赖、创建 .env.local 等）
 #  12. 初始化 OpenSpec
@@ -350,7 +350,8 @@ change-propose 阶段日志目录。记录 PRD readiness、四件套一致性、
 
 write_file_if_missing "$PROJECT_DIR/.logs/dispatch/_DIR.md" "# .logs/dispatch/_DIR.md
 
-change-dispatch 执行日志目录。记录任务认领、实现、验证、rebase/push 和 deferred _DIR.md 待办。"
+change-dispatch 执行日志目录。记录任务认领、实现、验证、rebase/push 中的 STOP/WARN。
+（main 共享 _DIR.md 的推迟更新不走日志，记录在各 change 目录的 pending-sync.md。）"
 
 write_file_if_missing "$PROJECT_DIR/.logs/review/_DIR.md" "# .logs/review/_DIR.md
 
@@ -412,8 +413,8 @@ PRD 缺字段 / 依赖字段异常 / 范围越界 / 设计偏离 / Pre-flight �
 # ─── 9. GitHub workflow scaffolding ───────────────────────────
 info "Creating GitHub workflow scaffolding ..."
 
-AUTO_MERGE_CONTENT=$(cat "$FRAMEWORK_DIR/templates/github-workflows/auto-merge.yml")
-write_file_if_missing "$PROJECT_DIR/.github/workflows/auto-merge.yml" "$AUTO_MERGE_CONTENT"
+CI_CONTENT=$(cat "$FRAMEWORK_DIR/templates/github-workflows/ci.yml")
+write_file_if_missing "$PROJECT_DIR/.github/workflows/ci.yml" "$CI_CONTENT"
 
 write_file_if_missing "$PROJECT_DIR/.github/_DIR.md" "# .github/_DIR.md
 
@@ -429,7 +430,7 @@ GitHub Actions workflow directory.
 
 ## 文件
 
-- \`auto-merge.yml\` — Enables merge-commit auto-merge when change-review marks a Draft PR as Ready."
+- \`ci.yml\` — test / lint / build 质量闸门。dispatch push 与 PR 都会触发；可在仓库设置中配置为 required check（配合 branch protection，change-review 会自动退化为 auto-merge 等待模式）。"
 
 # ─── 10. .gitignore — add .worktrees ──────────────────────────
 info "Checking .gitignore ..."
@@ -555,16 +556,18 @@ else
   printf '  • design/roadmap.md  — Global roadmap (architecture/dependencies/progress AUTO-synced)\n'
   printf '  • design/inputs/     — L0 raw design inputs (brainstorming/figma/interviews)\n'
   printf '  • design/modules/    — L1 module designs (maintained by module-designer)\n'
-  printf '  • .github/workflows/auto-merge.yml — Required auto-merge handoff for change-review\n'
+  printf '  • .github/workflows/ci.yml — CI quality gate (test/lint/build on push & PR)\n'
   printf '  • .logs/             — Execution logs (module-designer/prd/propose/dispatch/review)\n'
   printf '  • src/_DIR.md        — Fractal doc root\n'
   printf '  • .env.local         — Environment variables\n'
   printf '\nNext steps:\n'
   printf '  1. Fill in API keys in .env.local\n'
   printf '  2. Run: pnpm install && pnpm lint && pnpm build\n'
-  printf '  3. Drop raw inspiration into design/inputs/ (brainstorming/figma/interviews)\n'
-  printf '  4. Start the pipeline: /design  (module-designer builds M-NNN + decomposes into backlog)\n'
-  printf '  5. Continue: /prd B-NNN → /change-propose (after PRD approved) → dispatch runner → /change-review\n'
+  printf '  3. Ensure GitHub remote exists and `gh auth status` passes (change-propose creates PRs)\n'
+  printf '  4. Drop raw inspiration into design/inputs/ (brainstorming/figma/interviews)\n'
+  printf '  5. Start the pipeline: /design  (module-designer builds M-NNN + decomposes into backlog)\n'
+  printf '  6. Continue: /prd B-NNN → /change-propose (after PRD approved) → dispatch runner → /change-review\n'
+  printf '     For a fully automated loop, also schedule review: /loop <interval> /change-review\n'
   printf '\nPick a dispatch runner and configure its cadence for your project:\n'
   printf '  A. Claude Code /loop (dev-time, zero config):   /loop <interval> /change-dispatch\n'
   printf '  B. Codex Desktop Automation (24/7):             Name: change-dispatch | Schedule: <interval> | Worktree: yes\n'

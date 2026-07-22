@@ -108,9 +108,9 @@ rm -rf /tmp/superpowers
 
 dispatch 按 `design.md` 的 "UI Design Notes" 小节实现，不直接调用 impeccable 命令。
 
-**3. review 轮次 1（Claude Code / Codex）**
+**3. review 审查阶段（Claude Code / Codex）**
 
-本地 CI 通过后、`gh pr ready` 之前，对本次 UI diff 跑：
+本地 CI 通过后、合并之前，对本次 UI diff 跑：
 
 ```
 /audit              # 评分审查

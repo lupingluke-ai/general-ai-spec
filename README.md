@@ -73,7 +73,7 @@ General AI Spec 的处理方式：
 | 结构漂移 | 分形文档：每个目录 `_DIR.md`，关键文件 `@input/@output/@pos` |
 | 并发混乱 | feature branch + worktree + tasks.md claim 状态 |
 | 无法追踪 | `design inputs -> module -> backlog -> PRD -> change -> PR -> archive` |
-| 无法收尾 | `change-review` 两轮状态机 + 三维 verify + archive |
+| 无法收尾 | `change-review` 单轮闭环（审查→合并→verify→archive）+ 断点续跑 |
 
 ---
 

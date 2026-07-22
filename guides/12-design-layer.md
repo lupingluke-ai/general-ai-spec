@@ -18,7 +18,7 @@
 |---|---|---|
 | **L0 原始输入** | `design/inputs/` | brainstorming / figma / interviews 等原始资产，纯人工录入永久保留 |
 | **L1 模块设计** | `design/modules/M-NNN-*.md` | 模块边界、对外接口、技术选型、关联 backlog，由 `module-designer` 生成和维护 |
-| **全局蓝图** | `design/roadmap.md` | 愿景 + 架构 + 依赖 + 进度四合一，AUTO 段由 skill 实时同步 |
+| **全局蓝图** | `design/roadmap.md` | 愿景 + 架构 + 依赖 + 进度四合一，AUTO 段从 backlog + modules 全量重渲染 |
 
 每条 backlog 必须归属一个模块（`M-NNN`）。每个 PRD 必须引用模块文档。这把"一条 idea"锚定到系统结构上，change-propose 就可以以模块边界为范围约束。
 
@@ -49,9 +49,11 @@ L4 openspec/changes/      ← 四件套 + feature branch + Draft PR
 
 | AUTO 段 | 内容 | 维护方 |
 |---|---|---|
-| `AUTO:ARCHITECTURE` | 模块清单（ID / 名 / 状态 / 依赖） | `module-designer` 主写；`change-review` 在模块完结时更新 status |
-| `AUTO:DEPENDENCIES` | 模块依赖图（ASCII 或邻接表） | `module-designer` 整段重写 |
-| `AUTO:PROGRESS` | 按模块分组的 backlog 进度 | 4 个 skill 各自维护自己的行（按阶段分工） |
+| `AUTO:ARCHITECTURE` | 模块清单（ID / 名 / 状态 / 依赖） | 从 `design/modules/*.md` frontmatter 全量重渲染 |
+| `AUTO:DEPENDENCIES` | 模块依赖图（ASCII 或邻接表） | 从模块 `depends-on` 全量重渲染 |
+| `AUTO:PROGRESS` | 按模块分组的 backlog 进度 | 从 `product/backlog.md` 全量重渲染 |
+
+任何写 main 状态的 skill 都使用同一套渲染规则；AUTO 段是派生视图，不是独立事实源。
 
 ---
 
@@ -123,7 +125,7 @@ module-designer 落盘：
 module-designer 落盘：
   - 更新 M-002 的 "## 关联 Backlog" 小节
   - 在 backlog 追加新行
-  - 更新 roadmap AUTO:PROGRESS 新增 💡 行
+  - 从 backlog + modules 全量重渲染 roadmap 三段 AUTO 区
 ```
 
 ### 路径 C：brainstorming 优先
@@ -141,7 +143,7 @@ module-designer 落盘：
 
 - `prd-writer`：Step 2.2 module-ref 必填校验时提示用户补齐，否则拒绝生成 PRD
 - `change-propose`：Phase 0 筛选时跳过并写日志
-- `change-review`：Step 6.3.2 跳过模块/roadmap 同步
+- `change-review`：Step 6.3.2 跳过模块文档同步，但仍全量重渲染 roadmap
 - `module-designer`：`/design review M-NNN` 时可以把历史条目追加到"## 关联 Backlog"，完成手工补录
 
 ---
@@ -152,29 +154,24 @@ module-designer 落盘：
 |---|---|---|
 | `design/_DIR.md` | 人工 | 设计层总说明，偶尔更新 |
 | `design/roadmap.md`（人工段：愿景 / 原则 / 里程碑） | 人工 | 季度重审 |
-| `design/roadmap.md`（AUTO 段） | skill | **勿手改**——下次写入会覆盖 |
+| `design/roadmap.md`（AUTO 段） | 写 main 状态的 skill | 从事实源全量重渲染，**勿手改** |
 | `design/inputs/**` | 人工 | 原始设计资产永久保留，skill 只读 |
 | `design/modules/M-NNN-*.md`（frontmatter / 人工段） | `module-designer` | 建模块 + `/design review` |
-| `design/modules/M-NNN-*.md`（`## 关联 Backlog` / `## 修订历史`） | 多个 skill | 各自追加自己的行 |
+| `design/modules/M-NNN-*.md` 的 `## 关联 Backlog` | `module-designer` | 维护归属和 backlog 级依赖，不保存阶段 |
+| `design/modules/M-NNN-*.md` 的 `## 修订历史` | 多个 skill | 按各阶段追加历史记录 |
 
 ---
 
 ## 并发写入约定
 
-`design/roadmap.md` 的 `AUTO:PROGRESS` 段被 4 个 skill 同时维护，冲突通过"每个 skill 只改自己责任行"避免：
+`design/roadmap.md` 的 AUTO 段不做行级多写者合并：
 
-| Skill | 图标跃迁 | 责任行 |
-|---|---|---|
-| `module-designer` | `— → 💡` | 新建 / 追加 idea 行 |
-| `prd-writer` | `💡 → 🔎` | PRD approved 时 |
-| `change-propose` | `🔎 → 📝` | 四件套落盘 |
-| `change-review` | `📝 → ✅` | 归档 |
+1. 先合并事实源：`product/backlog.md` 按 B-NNN、`design/modules/*.md` 按 M-NNN / frontmatter / 修订历史处理冲突
+2. AUTO 段冲突任取一侧
+3. 从合并后的 backlog + modules 重新全量渲染三段 AUTO 区
+4. 保留 AUTO 边界外的愿景、原则、里程碑等人工内容
 
-读全量 → 定位本行 → 替换 → 写回。其他行原样保留。
-
-`AUTO:ARCHITECTURE` 仅在模块 status 变化时更新，由当时的 skill 负责（`prd-writer` 首次激活 / `change-review` 模块完结）。
-
-`AUTO:DEPENDENCIES` 只由 `module-designer` 整段重写。
+因为派生视图可以重建，所以不再依赖“每个 skill 只改自己那一行”的脆弱约定。具体渲染与 rebase 规则见 `core/git-safe-push.md`。
 
 ---
 
@@ -195,7 +192,7 @@ module-designer 落盘：
 `module-designer` 运行时可能触发的偏离写到 `.logs/module-designer/<M-NNN>.md`：
 
 - **范围偏离**：idea 落在了与 module 边界不一致的承担项上
-- **并发偏离**：AUTO 段已被其他 skill 写入过新内容
+- **并发偏离**：事实源发生编号碰撞或无法按主键自动合并
 - **拆分偏离**：idea 粒度与"独立用户价值"原则冲突
 
 偏离处理策略见 `skills/module-designer/SKILL.md` 复盘检查点。
