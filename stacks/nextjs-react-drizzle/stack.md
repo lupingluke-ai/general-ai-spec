@@ -45,7 +45,7 @@
 - Node.js 22.x
 - pnpm 10.x
 - PostgreSQL 16
-- Docker (optional, for local database bootstrap)
+- Docker (optional；只有显式设置 `START_LOCAL_SERVICES=true` 时初始化脚本才启动本地数据库)
 
 ---
 
@@ -121,5 +121,6 @@ pnpm lint                  # Linting 通过
 pnpm build                 # 构建成功
 pnpm test                  # 单元测试通过
 pnpm dev                   # 开发服务器启动
-docker ps                  # PostgreSQL 容器运行中（如果用 Docker）
+START_LOCAL_SERVICES=true bash <framework>/scripts/init.sh --stack nextjs-react-drizzle --dir <project>
+docker ps                  # 仅显式 opt-in 后检查 PostgreSQL 容器
 ```

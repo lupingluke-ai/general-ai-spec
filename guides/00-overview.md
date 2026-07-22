@@ -46,15 +46,15 @@ change-propose                 ← 交互式 agent（Claude Code / Codex，人�
   │
   ▼
 change-dispatch                ← dispatch runner（Codex Automation / `/loop` / cron / GH Actions，按配置间隔自动）
-  │  扫描 backlog → fetch branch → 领取任务组 → worktree 执行 → push → tasks.md status: review
+  │  扫描 backlog → detached worktree → 原子 claim → 唯一 worker branch 执行 → fast-forward push
+  │  → tasks.md status: review
   │  → Draft PR 自动更新 → CI 自动运行
   │  （backlog 阶段保持 proposed——dispatch 不碰 main；细粒度看 tasks.md status）
   │
   ▼
 change-review                  ← 交互式 agent（Claude Code / Codex，人工 / 定期 / CI 全绿触发）
-  │  PR 审查 → 分形文档同步 → PR 合并
-  │  → verify 三维度（completeness / correctness / coherence）
-  │  → sync delta specs → 归档 → 更新 backlog
+  │  PR 审查 → 分形文档同步 → 合并前三维 Verify
+  │  → implementation PR 合并 → sync delta specs + archive governance PR
   │  → backlog 阶段: done
   │
   ▼
@@ -67,13 +67,13 @@ change-review                  ← 交互式 agent（Claude Code / Codex，人�
 idea → exploring → proposed ────────────────────────→ done
  ↑        ↑           ↑                                  ↑
 module  prd-writer  change-propose                  change-review
-designer  (PRD)     (四件套 + Draft PR)              (归档 + verify)
+designer  (PRD)     (四件套 + Draft PR)              (Verify + 合并 + 归档)
 
 执行细粒度（tasks.md YAML status，change 独占，dispatch 禁碰 main）：
 draft → ready → executing → review → done
           │         │          │        │
       propose   dispatch    dispatch   review
-                 (领取)   (收敛全done) (合并+归档)
+                 (原子领取) (收敛全done) (预合并 Verify + 归档)
 ```
 
 ## 模块状态流转

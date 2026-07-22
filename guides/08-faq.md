@@ -136,6 +136,8 @@ B-005  AI 语音记账 - 历史记录集成  → PRD-005 → change: ai-voice-hi
 2. tasks.md 的 `status` 是否为 `ready`
 3. `depends-on` 中的前置 change 是否都已 `done`
 4. 是否有任务组的 `status` 为 `pending` 且 `执行模式: auto`（兼容旧 `执行工具: Codex`，= 自动化任务组）
+5. `claim-id/claimed-at/heartbeat-at` 是否格式正确；`executing` 组只有 heartbeat 超过 150 分钟才能回收，空时间戳必须人工处理
+6. GitHub Actions secrets `OPENAI_API_KEY`、`DISPATCH_GITHUB_TOKEN` 是否存在，runner 是否能运行项目工具链
 
 ### Q: dispatch 执行出错了怎么办？
 
@@ -173,7 +175,7 @@ B-005  AI 语音记账 - 历史记录集成  → PRD-005 → change: ai-voice-hi
 - **Correctness 失败**：test/lint/build 不过 → 修代码
 - **Coherence 失败**：目录结构或文档不一致 → 补 _DIR.md 和头注释
 
-修复后重新运行 verify。
+修复后重新运行 Verify、CI 与 rebase；全部通过并 push 最新 SHA 后才能合并 PR。
 
 ### Q: 归档时 sync delta specs 的具体操作是什么？
 
@@ -198,7 +200,7 @@ change 的 specs/ai-voice.md 中的 REMOVED Requirements
 
 两个核心机制：
 
-1. **`_DIR.md`** — 每个目录一个，说明目录职责、子目录分工、关键入口
+1. **`_DIR.md`** — 每个项目自有目录一个，说明目录职责、子目录分工、关键入口；依赖、缓存和外部工具管理目录除外
 2. **`@input/@output/@pos` 头注释** — 关键源码文件的头部注释，说明输入、输出和在系统中的位置
 
 ### Q: 什么时候更新分形文档？
@@ -231,18 +233,18 @@ change 的 specs/ai-voice.md 中的 REMOVED Requirements
 
 1. **feature branch 写到 main 共享文件**（`product/backlog.md` / `design/roadmap.md` / `openspec/specs/**` / 主 `_DIR.md` 等）→ 两个 change 在各自 feature branch 都改同一段 → 合并时物理冲突
 2. **合并前 main 又前进了**（别的 change 先合并）→ 当前 PR 的 base 过期 → GitHub 标记 "需要更新"
-3. **多个 skill 并发 push main**（定时 propose + 定时 review + 任意 dispatch runner + 人工）→ 第二个被拒 (non-fast-forward)
+3. **多个治理 skill 同时更新共享状态**（propose/review/design/PRD）→ governance PR 的 base 过期或 AUTO 派生段冲突
 
 当前版本已经把三类全部系统化防住：
 
 - 类型 1 → `core/AGENTS.md` 的 "Feature Branch 治理层禁改清单" + `change-review` Step 3 只处理 change-owned 分形文档 + dispatch D1 / review R1 双检查点 + main 共享 `_DIR.md` 走 `pending-sync.md` 在 main 串行消费
 - 类型 2 → `change-review` Step 3.8 rebase-before-merge（合并前强制 rebase `origin/main`，force-with-lease push）
-- 类型 3 → `core/git-safe-push.md`（3 轮 pull-rebase-push + 分段冲突策略；roadmap AUTO 段冲突后全量重渲染；主 specs 冲突 → STOP）
+- 类型 3 → 所有 main 写入改走 deterministic governance PR；事实源按 ID 合并，roadmap AUTO 段全量重渲染，主 specs 语义冲突则 STOP
 
 遇到冲突时按 `.logs/review/<change-id>.md` 的 STOP 日志判断类型：
 - 治理违规 → 人工回滚该 commit（禁改清单说明之）
 - Step 3.8 conflict B / C → 回 `/design review M-NNN` 或人工介入
-- git-safe-push 3 轮失败 → 按日志中的冲突段人工 merge 后续跑
+- governance PR 三轮仍有语义冲突 → 按日志人工裁决后重跑；不得改为直接 push main
 
 ### Q: 为什么 main 禁止 force push，feature branch 却允许？
 
@@ -250,7 +252,7 @@ main 是协作基线：force push 会丢掉其他人已经合并的提交，且�
 
 feature branch 的 force-with-lease 仅在 `change-review` Step 3.8 rebase-before-merge 允许——rebase 改写了 feature branch 历史但没有丢任何人的工作（所有合并都尚未发生）。且 `--force-with-lease` 会在远端有新提交时失败，防止误覆盖。
 
-其他时候（dispatch push / 交互式 agent 分形 sync push）都用普通 push + `git pull --rebase`。
+dispatch 的 claim push 是远端 fast-forward 竞争：失败者必须丢弃 claim 并重新选组；只有实现完成后的汇合 push 才允许 fetch/rebase 后按 group-id 合并 tasks 状态。
 
 ---
 

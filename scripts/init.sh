@@ -16,11 +16,11 @@
 #   6. 创建 product/ 目录（backlog.md + _DIR.md）
 #   7. 创建 design/ 目录（roadmap.md + inputs/ + modules/，module-designer 消费）
 #   8. 创建 .logs/ 目录（执行日志基础设施）
-#   9. 创建 GitHub workflow（ci: test/lint/build）
-#  10. 配置 .gitignore
-#  11. 运行 stacks/<name>/scaffold.sh（安装依赖、创建 .env.local 等）
+#   9. 创建 GitHub workflows（ci/propose/dispatch/review）
+#  10. 运行 stacks/<name>/scaffold.sh（安装依赖、创建 .env.local 等）
+#  11. 配置 .gitignore
 #  12. 初始化 OpenSpec
-#  13. 安装 skills
+#  13. 安装 runtime tools 与 skills
 #  14. 安装可选扩展 skills
 
 set -euo pipefail
@@ -92,10 +92,30 @@ if [ ! -d "$STACK_DIR" ]; then
 fi
 
 PROJECT_DIR="${PROJECT_DIR:-.}"
-if [ ! -d "$PROJECT_DIR" ]; then
+if [ -d "$PROJECT_DIR" ]; then
+  PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd -P)"
+elif $DRY_RUN; then
+  case "$PROJECT_DIR" in
+    /*) ;;
+    *) PROJECT_DIR="$(pwd)/$PROJECT_DIR" ;;
+  esac
+else
+  case "$PROJECT_DIR" in
+    /*) PROJECT_CANDIDATE="$PROJECT_DIR" ;;
+    *) PROJECT_CANDIDATE="$(pwd -P)/$PROJECT_DIR" ;;
+  esac
+  PARENT_PROBE=$(dirname "$PROJECT_CANDIDATE")
+  while [ ! -d "$PARENT_PROBE" ] && [ "$PARENT_PROBE" != "/" ]; do
+    PARENT_PROBE=$(dirname "$PARENT_PROBE")
+  done
+  PARENT_GIT_TOP=$(git -C "$PARENT_PROBE" rev-parse --show-toplevel 2>/dev/null || true)
+  if [ -n "$PARENT_GIT_TOP" ]; then
+    printf 'Error: target would be nested inside Git worktree %s. Choose a path outside it.\n' "$PARENT_GIT_TOP" >&2
+    exit 1
+  fi
   mkdir -p "$PROJECT_DIR"
+  PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd -P)"
 fi
-PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 
 # ─── Helpers ────────────────────────────────────────────────
 info()  { printf '\n[INFO]  %s\n' "$*"; }
@@ -104,8 +124,9 @@ skip()  { printf '[SKIP]  %s\n' "$*"; }
 would() { printf '[WOULD] %s\n' "$*"; }
 fail()  { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
-run_cmd() {
-  if $DRY_RUN; then would "$*"; else eval "$*"; fi
+make_dir() {
+  local target="$1"
+  if $DRY_RUN; then would "Create directory $target"; else mkdir -p "$target"; fi
 }
 
 write_file() {
@@ -133,6 +154,34 @@ write_file_if_missing() {
 info "Initializing project with stack: $STACK_NAME"
 info "Project directory: $PROJECT_DIR"
 $DRY_RUN && info "(Dry-run mode — nothing will be changed)"
+
+if ! command -v node >/dev/null 2>&1; then
+  fail "Node.js 22 is required. Install it and rerun init.sh."
+fi
+NODE_MAJOR=$(node -p 'Number(process.versions.node.split(".")[0])')
+if [ "$NODE_MAJOR" -lt 22 ]; then
+  fail "Node.js 22+ is required; found $(node --version)."
+fi
+
+GIT_PROBE_DIR="$PROJECT_DIR"
+while [ ! -d "$GIT_PROBE_DIR" ] && [ "$GIT_PROBE_DIR" != "/" ]; do
+  GIT_PROBE_DIR=$(dirname "$GIT_PROBE_DIR")
+done
+TARGET_GIT_TOP=$(git -C "$GIT_PROBE_DIR" rev-parse --show-toplevel 2>/dev/null || true)
+if [ -n "$TARGET_GIT_TOP" ]; then
+  TARGET_GIT_TOP=$(cd "$TARGET_GIT_TOP" && pwd -P)
+fi
+if [ -n "$TARGET_GIT_TOP" ] && [ "$TARGET_GIT_TOP" != "$PROJECT_DIR" ]; then
+  fail "Target is nested inside another Git worktree ($TARGET_GIT_TOP). Choose that repository root or a path outside it."
+fi
+if [ -z "$TARGET_GIT_TOP" ]; then
+  if $DRY_RUN; then
+    would "Initialize Git repository with main branch at $PROJECT_DIR"
+  else
+    git -C "$PROJECT_DIR" init -q -b main
+    ok "Git repository initialized on main"
+  fi
+fi
 
 # ─── 1. Generate AGENTS.md ──────────────────────────────────
 info "Generating AGENTS.md ..."
@@ -233,6 +282,10 @@ write_file_if_missing "$PROJECT_DIR/CLAUDE.md" "$CLAUDE_CONTENT"
 # ─── 5. Fractal documentation skeleton ──────────────────────
 info "Creating fractal documentation skeleton ..."
 
+write_file_if_missing "$PROJECT_DIR/_DIR.md" "# 项目根目录
+
+项目级入口目录。\`AGENTS.md\` 与 \`CLAUDE.md\` 定义 Agent 入口，\`openspec/\`、\`product/\`、\`design/\` 承载需求与规格，\`src/\` 承载实现，\`scripts/\` 与 \`.github/\` 承载自动化。"
+
 write_file_if_missing "$PROJECT_DIR/src/_DIR.md" "# src/_DIR.md
 
 负责应用源码主目录，承载页面入口、共享组件、业务逻辑与类型定义。
@@ -279,7 +332,7 @@ write_file_if_missing "$PROJECT_DIR/product/_DIR.md" "# product/_DIR.md
 - \`backlog.md\` — 产品需求 Backlog，所有开发工作的起点
 - \`prd/\` — 产品需求文档（PRD），每个 backlog 条目一份"
 
-run_cmd "mkdir -p \"$PROJECT_DIR/product/prd\""
+make_dir "$PROJECT_DIR/product/prd"
 
 write_file_if_missing "$PROJECT_DIR/product/prd/_DIR.md" "# product/prd/_DIR.md
 
@@ -305,36 +358,23 @@ DESIGN_MODULES_DIR=$(cat "$FRAMEWORK_DIR/templates/design/modules/_DIR.md")
 write_file_if_missing "$PROJECT_DIR/design/modules/_DIR.md" "$DESIGN_MODULES_DIR"
 
 # inputs 子目录（纯人工录入区）
-run_cmd "mkdir -p \"$PROJECT_DIR/design/inputs/brainstorming\""
-run_cmd "mkdir -p \"$PROJECT_DIR/design/inputs/figma\""
-run_cmd "mkdir -p \"$PROJECT_DIR/design/inputs/interviews\""
+make_dir "$PROJECT_DIR/design/inputs/brainstorming"
+make_dir "$PROJECT_DIR/design/inputs/figma"
+make_dir "$PROJECT_DIR/design/inputs/interviews"
 
-write_file_if_missing "$PROJECT_DIR/design/inputs/brainstorming/_DIR.md" "# design/inputs/brainstorming/_DIR.md
-
-头脑风暴与早期灵感记录目录。这里保留原始想法、问题探索和候选方案，供 module-designer 在 /design 阶段读取。
-
-本目录由人工或可选 brainstorming skill 写入；核心流水线只读取。"
-
-write_file_if_missing "$PROJECT_DIR/design/inputs/figma/_DIR.md" "# design/inputs/figma/_DIR.md
-
-Figma 原型、截图说明和交互注释目录。这里记录设计稿链接、关键页面说明与交互约束。
-
-本目录由人工维护，module-designer 读取后将相关输入引用到模块文档。"
-
-write_file_if_missing "$PROJECT_DIR/design/inputs/interviews/_DIR.md" "# design/inputs/interviews/_DIR.md
-
-用户访谈和调研记录目录。这里保留访谈纪要、痛点摘录和用户语境。
-
-本目录由人工维护，module-designer 读取后将相关输入引用到模块文档。"
+for input_kind in brainstorming figma interviews; do
+  INPUT_DIR_DOC=$(cat "$FRAMEWORK_DIR/templates/design/inputs/$input_kind/_DIR.md")
+  write_file_if_missing "$PROJECT_DIR/design/inputs/$input_kind/_DIR.md" "$INPUT_DIR_DOC"
+done
 
 # ─── 8. Create .logs/ directory ────────────────────────────────
 info "Creating .logs/ directory ..."
 
-run_cmd "mkdir -p \"$PROJECT_DIR/.logs/dispatch\""
-run_cmd "mkdir -p \"$PROJECT_DIR/.logs/propose\""
-run_cmd "mkdir -p \"$PROJECT_DIR/.logs/review\""
-run_cmd "mkdir -p \"$PROJECT_DIR/.logs/prd\""
-run_cmd "mkdir -p \"$PROJECT_DIR/.logs/module-designer\""
+make_dir "$PROJECT_DIR/.logs/dispatch"
+make_dir "$PROJECT_DIR/.logs/propose"
+make_dir "$PROJECT_DIR/.logs/review"
+make_dir "$PROJECT_DIR/.logs/prd"
+make_dir "$PROJECT_DIR/.logs/module-designer"
 
 write_file_if_missing "$PROJECT_DIR/.logs/module-designer/_DIR.md" "# .logs/module-designer/_DIR.md
 
@@ -346,7 +386,7 @@ prd-writer 阶段日志目录。记录 PRD 字段、模块边界、roadmap 同�
 
 write_file_if_missing "$PROJECT_DIR/.logs/propose/_DIR.md" "# .logs/propose/_DIR.md
 
-change-propose 阶段日志目录。记录 PRD readiness、四件套一致性、pre-flight 和 main push 中的 STOP/WARN。"
+change-propose 阶段日志目录。记录 PRD readiness、四件套一致性、pre-flight 和 governance PR 发布中的 STOP/WARN。"
 
 write_file_if_missing "$PROJECT_DIR/.logs/dispatch/_DIR.md" "# .logs/dispatch/_DIR.md
 
@@ -415,6 +455,12 @@ info "Creating GitHub workflow scaffolding ..."
 
 CI_CONTENT=$(cat "$FRAMEWORK_DIR/templates/github-workflows/ci.yml")
 write_file_if_missing "$PROJECT_DIR/.github/workflows/ci.yml" "$CI_CONTENT"
+DISPATCH_WORKFLOW=$(cat "$FRAMEWORK_DIR/templates/github-workflows/dispatch.yml")
+write_file_if_missing "$PROJECT_DIR/.github/workflows/dispatch.yml" "$DISPATCH_WORKFLOW"
+PROPOSE_WORKFLOW=$(cat "$FRAMEWORK_DIR/templates/github-workflows/propose.yml")
+write_file_if_missing "$PROJECT_DIR/.github/workflows/propose.yml" "$PROPOSE_WORKFLOW"
+REVIEW_WORKFLOW=$(cat "$FRAMEWORK_DIR/templates/github-workflows/review.yml")
+write_file_if_missing "$PROJECT_DIR/.github/workflows/review.yml" "$REVIEW_WORKFLOW"
 
 write_file_if_missing "$PROJECT_DIR/.github/_DIR.md" "# .github/_DIR.md
 
@@ -430,20 +476,14 @@ GitHub Actions workflow directory.
 
 ## 文件
 
-- \`ci.yml\` — test / lint / build 质量闸门。dispatch push 与 PR 都会触发；可在仓库设置中配置为 required check（配合 branch protection，change-review 会自动退化为 auto-merge 等待模式）。"
+- \`ci.yml\` — test / lint / build required check
+- \`propose.yml\` — Codex CLI 定时把 approved PRD 发布为 change
+- \`dispatch.yml\` — Codex CLI 定时领取一个 auto 任务组
+- \`review.yml\` — Codex CLI 定时审查、恢复和归档一个 change
 
-# ─── 10. .gitignore — add .worktrees ──────────────────────────
-info "Checking .gitignore ..."
+dispatch/review 需要 \`OPENAI_API_KEY\` 与 \`DISPATCH_GITHUB_TOKEN\` secrets。后者必须是可触发后续 workflows 的 fine-grained PAT 或 GitHub App token，并拥有 contents / pull requests write。"
 
-GITIGNORE="$PROJECT_DIR/.gitignore"
-if [ -f "$GITIGNORE" ] && grep -q '\.worktrees' "$GITIGNORE"; then
-  skip ".gitignore already contains .worktrees"
-else
-  run_cmd "printf '\\n# Git worktrees for parallel development\\n.worktrees\\n' >> \"$GITIGNORE\""
-  $DRY_RUN || ok ".worktrees added to .gitignore"
-fi
-
-# ─── 11. Run stack scaffold.sh ──────────────────────────────
+# ─── 10. Run stack scaffold.sh ──────────────────────────────
 SCAFFOLD="$STACK_DIR/scaffold.sh"
 if [ -f "$SCAFFOLD" ]; then
   info "Running stack scaffold ($STACK_NAME) ..."
@@ -456,10 +496,51 @@ else
   skip "No scaffold.sh found for $STACK_NAME"
 fi
 
+if [ -d "$PROJECT_DIR/public" ]; then
+  write_file_if_missing "$PROJECT_DIR/public/_DIR.md" "# public/_DIR.md
+
+静态资源目录。仅存放需要由应用原样公开的图片、图标和下载文件；新增或删除资源时同步更新本索引。"
+fi
+
+# ─── 11. .gitignore — required safety patterns ───────────────
+info "Checking .gitignore safety patterns ..."
+
+GITIGNORE="$PROJECT_DIR/.gitignore"
+
+ensure_gitignore_entry() {
+  local entry="$1"
+  if [ -f "$GITIGNORE" ] && grep -Fqx -- "$entry" "$GITIGNORE"; then
+    return 0
+  fi
+  if $DRY_RUN; then
+    would "Add '$entry' to $GITIGNORE"
+  else
+    touch "$GITIGNORE"
+    printf '%s\n' "$entry" >> "$GITIGNORE"
+  fi
+}
+
+if ! $DRY_RUN && ! grep -Fqx -- "# General AI Spec safety rules" "$GITIGNORE" 2>/dev/null; then
+  printf '\n# General AI Spec safety rules\n' >> "$GITIGNORE"
+fi
+ensure_gitignore_entry ".worktrees/"
+ensure_gitignore_entry ".env"
+ensure_gitignore_entry ".env.*"
+ensure_gitignore_entry "!.env.example"
+ensure_gitignore_entry "node_modules/"
+ensure_gitignore_entry ".next/"
+ensure_gitignore_entry "out/"
+ensure_gitignore_entry "dist/"
+ensure_gitignore_entry "build/"
+ensure_gitignore_entry "coverage/"
+ensure_gitignore_entry ".turbo/"
+ensure_gitignore_entry "*.log"
+$DRY_RUN || ok ".gitignore safety patterns verified"
+
 # ─── 12. Initialize OpenSpec ────────────────────────────────
 info "Initializing OpenSpec ..."
 
-OPENSPEC_PKG="${OPENSPEC_PKG:-@fission-ai/openspec@1.2.0}"
+OPENSPEC_PKG="${OPENSPEC_PKG:-@fission-ai/openspec@1.6.0}"
 
 if $DRY_RUN; then
   would "Initialize OpenSpec with $OPENSPEC_PKG"
@@ -480,9 +561,29 @@ else
     fail "OpenSpec Claude init completed but .claude/skills/openspec-propose/SKILL.md is missing."
   fi
   ok "OpenSpec initialized for Claude Code"
+  info "OpenSpec may label openspec/project.md as legacy; General AI Spec intentionally keeps it as the detailed technical/directory baseline and links it from config.yaml context."
 fi
 
-# ─── 13. Install skills ─────────────────────────────────────
+# ─── 13. Install runtime tools and skills ───────────────────
+info "Installing framework runtime tools ..."
+
+make_dir "$PROJECT_DIR/scripts"
+write_file_if_missing "$PROJECT_DIR/scripts/_DIR.md" "# scripts/_DIR.md
+
+项目自动化脚本目录。General AI Spec 安装的治理发布、change 校验和 roadmap 渲染工具位于本目录；业务脚本可并列放置并补充本索引。"
+
+for runtime_tool in governance-publish.sh validate-change.mjs render-roadmap.mjs; do
+  source_tool="$FRAMEWORK_DIR/scripts/$runtime_tool"
+  target_tool="$PROJECT_DIR/scripts/$runtime_tool"
+  if $DRY_RUN; then
+    would "Copy runtime tool $runtime_tool to $target_tool"
+  else
+    cp "$source_tool" "$target_tool"
+    chmod +x "$target_tool"
+    ok "  → scripts/$runtime_tool"
+  fi
+done
+
 info "Installing skills ..."
 
 FRAMEWORK_SKILLS="$FRAMEWORK_DIR/skills"
@@ -494,22 +595,53 @@ if [ -d "$FRAMEWORK_SKILLS" ]; then
     [ -d "$skill_path" ] || continue
     name=$(basename "$skill_path")
 
-    # .agents/skills/ (for Codex)
+    # .agents/skills/ (portable, project-owned copy for Codex)
     target_agents="$PROJECT_SKILLS_AGENTS/$name"
-    if [ -e "$target_agents" ]; then
+    if [ -L "$target_agents" ]; then
+      if $DRY_RUN; then
+        would "Replace .agents/skills/$name symlink with portable copy"
+      else
+        rm "$target_agents"
+        mkdir -p "$PROJECT_SKILLS_AGENTS"
+        cp -R "$skill_path" "$target_agents"
+        ok "  → .agents/skills/$name (portable copy)"
+      fi
+    elif [ -e "$target_agents" ]; then
       skip "  .agents/skills/$name (already exists)"
     else
-      run_cmd "mkdir -p \"$PROJECT_SKILLS_AGENTS\" && ln -sfn \"$skill_path\" \"$target_agents\""
-      $DRY_RUN || ok "  → .agents/skills/$name"
+      if $DRY_RUN; then
+        would "Copy $skill_path to .agents/skills/$name"
+      else
+        mkdir -p "$PROJECT_SKILLS_AGENTS"
+        cp -R "$skill_path" "$target_agents"
+        ok "  → .agents/skills/$name (portable copy)"
+      fi
     fi
 
-    # .claude/skills/ (for Claude Code)
+    # .claude/skills/ (portable relative link to the project-owned copy)
     target_claude="$PROJECT_SKILLS_CLAUDE/$name"
-    if [ -e "$target_claude" ]; then
+    relative_target="../../.agents/skills/$name"
+    if [ -L "$target_claude" ]; then
+      current_target=$(readlink "$target_claude")
+      if [ "$current_target" = "$relative_target" ]; then
+        skip "  .claude/skills/$name (portable symlink already exists)"
+      elif $DRY_RUN; then
+        would "Replace .claude/skills/$name with portable relative symlink"
+      else
+        rm "$target_claude"
+        ln -s "$relative_target" "$target_claude"
+        ok "  → .claude/skills/$name (portable symlink)"
+      fi
+    elif [ -e "$target_claude" ]; then
       skip "  .claude/skills/$name (already exists)"
     else
-      run_cmd "mkdir -p \"$PROJECT_SKILLS_CLAUDE\" && ln -sfn \"$skill_path\" \"$target_claude\""
-      $DRY_RUN || ok "  → .claude/skills/$name"
+      if $DRY_RUN; then
+        would "Link .claude/skills/$name to $relative_target"
+      else
+        mkdir -p "$PROJECT_SKILLS_CLAUDE"
+        ln -s "$relative_target" "$target_claude"
+        ok "  → .claude/skills/$name (portable symlink)"
+      fi
     fi
   done
 else
@@ -556,13 +688,14 @@ else
   printf '  • design/roadmap.md  — Global roadmap (architecture/dependencies/progress AUTO-synced)\n'
   printf '  • design/inputs/     — L0 raw design inputs (brainstorming/figma/interviews)\n'
   printf '  • design/modules/    — L1 module designs (maintained by module-designer)\n'
-  printf '  • .github/workflows/ci.yml — CI quality gate (test/lint/build on push & PR)\n'
+  printf '  • .github/workflows/ — CI plus runnable propose/dispatch/review Codex runners\n'
   printf '  • .logs/             — Execution logs (module-designer/prd/propose/dispatch/review)\n'
+  printf '  • scripts/           — Portable governance publish, validation, and roadmap tools\n'
   printf '  • src/_DIR.md        — Fractal doc root\n'
   printf '  • .env.local         — Environment variables\n'
   printf '\nNext steps:\n'
   printf '  1. Fill in API keys in .env.local\n'
-  printf '  2. Run: pnpm install && pnpm lint && pnpm build\n'
+  printf '  2. Run: pnpm install && pnpm test && pnpm lint && pnpm build\n'
   printf '  3. Ensure GitHub remote exists and `gh auth status` passes (change-propose creates PRs)\n'
   printf '  4. Drop raw inspiration into design/inputs/ (brainstorming/figma/interviews)\n'
   printf '  5. Start the pipeline: /design  (module-designer builds M-NNN + decomposes into backlog)\n'
@@ -572,7 +705,7 @@ else
   printf '  A. Claude Code /loop (dev-time, zero config):   /loop <interval> /change-dispatch\n'
   printf '  B. Codex Desktop Automation (24/7):             Name: change-dispatch | Schedule: <interval> | Worktree: yes\n'
   printf '  C. cron:                                        <cron> cd %s && claude -p "/change-dispatch" >> .logs/dispatch/cron.log 2>&1\n' "$PROJECT_DIR"
-  printf '  D. GitHub Actions:                              schedule workflow calling `claude -p "/change-dispatch"` or `codex exec`\n'
+  printf '  D. GitHub Actions:                              set OPENAI_API_KEY + DISPATCH_GITHUB_TOKEN, then enable generated workflows\n'
   printf '  E. One-shot manual:                             /change-dispatch\n'
   printf '  See skills/change-dispatch/SKILL.md for full runner recipes.\n'
 fi

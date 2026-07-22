@@ -74,17 +74,32 @@
 - WHEN 浏览器 Speech API 完成识别
 - THEN 系统获得文本 "午饭花了32块"
 
+**Scenario: 浏览器不支持语音识别**
+- GIVEN 当前浏览器没有 Speech API
+- WHEN 用户点击语音按钮
+- THEN 系统显示可恢复的“不支持语音输入”提示且不发送空文本
+
 ## MODIFIED Requirements
 
 ### REQ: 首页快捷操作区
 首页快捷操作区 SHALL 包含语音按钮。
 （之前：仅包含"快速记一笔"和"查看统计"两个按钮）
 
+**Scenario: 正常展示语音入口**
+- GIVEN 浏览器支持 Speech API
+- WHEN 用户打开首页快捷操作区
+- THEN 系统显示可用的语音按钮
+
+**Scenario: 不支持时禁用入口**
+- GIVEN 浏览器不支持 Speech API
+- WHEN 用户打开首页快捷操作区
+- THEN 系统显示禁用的语音按钮及原因说明
+
 ## REMOVED Requirements
 （无）
 ```
 
-**规则：** 每个需求至少一个 Given/When/Then 场景。归档时这些 delta specs 会合并到 `openspec/specs/` 主文件中。
+**规则：** feature 的每个需求至少包含正常与异常/边界两个 Given/When/Then 场景。bug/chore/hotfix 若没有可观察行为规格变化，可以不写 delta 文件，但必须提交 `specs/README.md`，其中包含 `delta-specs: none` 和非空 `reason:`。归档时 delta specs 合并到主 specs；optional marker 只作为审计证据保留。
 
 ### design.md
 
@@ -111,7 +126,7 @@ depends-on: []
 ```markdown
 ## 共享基础设施
 
-<!-- 执行模式: auto | 约束: 串行，必须先完成 | status: pending -->
+<!-- 执行模式: auto | 约束: 串行，必须先完成 | status: pending | claim-id: none | claimed-at: none | heartbeat-at: none -->
 
 - [ ] 创建 AI 提取类型定义和 Zod schema
 - [ ] 创建分类匹配工具函数和单元测试
@@ -119,7 +134,7 @@ depends-on: []
 
 ## 语音入口组件
 
-<!-- 执行模式: auto | 约束: G0 完成后 | status: pending -->
+<!-- 执行模式: auto | 约束: G0 完成后 | status: pending | claim-id: none | claimed-at: none | heartbeat-at: none -->
 
 - [ ] 创建 Web Speech API Hook
 - [ ] 创建语音记账按钮组件和测试
@@ -148,7 +163,7 @@ depends-on: []
 **关键约束：**
 - tasks.md 不超过 300 行（典型 15-50 行）
 - 不内联代码 — dispatch runner 有代码库访问权限和 design.md
-- "文档与分形同步"和"归档"是固定的最后两个任务组
+- 固定的最后三个任务组依次为“文档与分形同步”→“Verify”→“归档”
 
 ## Phase 2 — Pre-flight & 标记 Ready
 
@@ -157,11 +172,11 @@ depends-on: []
 交互式 agent 在标记 ready 前自动验证：
 
 - [ ] proposal.md 已落盘（含 Backlog Ref）
-- [ ] specs/ 已落盘（至少一个 delta spec 文件）
+- [ ] specs/ 已落盘：feature 至少一个 delta 文件；其他类型无行为变化时有合法 optional marker
 - [ ] design.md 已落盘
 - [ ] tasks.md 已落盘（含 YAML 状态头）
 - [ ] _DIR.md 已落盘
-- [ ] delta specs 每个需求至少一个 Given/When/Then
+- [ ] 每个 delta requirement 同时覆盖正常与异常/边界 Given/When/Then 场景
 - [ ] tasks.md ≤ 300 行
 - [ ] 并行组内无文件写入冲突
 
@@ -172,8 +187,8 @@ Pre-flight 通过后：
 1. tasks.md YAML 头 `status` → `ready`
 2. 创建 feature branch `<branch-prefix>/<change-id>`（前缀由 backlog / PRD type 直接映射，见 [11-task-types.md](./11-task-types.md)），将四件套提交到该分支
 3. 推送分支并创建 Draft PR
-4. 在 main 上更新 `product/backlog.md` 对应条目阶段 → `proposed`，Change 列写入 change-id（1:1）
-5. 更新 `openspec/changes/_DIR.md` 索引表（含 branch、PR link）
+4. 在本地 main 快照更新 `product/backlog.md` 对应条目阶段 → `proposed`，Change 列写入 change-id（1:1）
+5. 更新 `openspec/changes/_DIR.md`、module 与 roadmap，并通过 `governance/change-propose/<change-id>` PR 发布；只有该 PR MERGED 后 dispatch 才接管
 
 **此时人工工作结束。** 后续由 dispatch runner（Codex Automation / `/loop` / cron / GH Actions 任选其一）自动接管执行。
 

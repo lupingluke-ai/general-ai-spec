@@ -42,7 +42,7 @@
 | **idea** | 初步想法 | `module-designer` / 人工补录 | 使用 `/design` 建模块 + 拆 idea 时 |
 | **exploring** | 调研中，PRD 生成中 | `prd-writer` | 使用 `/prd B-NNN` 时（同步首次激活模块 status: planning → active）|
 | **proposed** | 已拆分为 change | `change-propose` | 四件套 + Draft PR 落盘后 |
-| **done** | 已归档 | `change-review` | verify 三维度通过后（若为模块最后一条，同步 active → done）|
+| **done** | 已归档 | `change-review` | 合并前 Verify 通过、实现 PR 合并且 archive governance PR 生效后（若为模块最后一条，同步 active → done）|
 
 > backlog 只保留 4 个"有明确写入者"的阶段（`idea / exploring / proposed / done`）。执行中 / 审查中的细粒度（dispatch 领取、组完成、PR review）由 `tasks.md` YAML 头的 `status` 字段（`draft / ready / executing / review / done`）承担——dispatch 禁碰 main 治理层，无法把细粒度反映到 backlog。
 

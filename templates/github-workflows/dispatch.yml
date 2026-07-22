@@ -1,0 +1,54 @@
+name: Change Dispatch
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: change-dispatch-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CODEX_CLI_VERSION: "0.145.0"
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 140
+    env:
+      GH_TOKEN: ${{ secrets.DISPATCH_GITHUB_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Verify required secrets
+        run: |
+          test -n "$GH_TOKEN"
+          test -n "$OPENAI_API_KEY"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.DISPATCH_GITHUB_TOKEN }}
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: npm install --global "@openai/codex@$CODEX_CLI_VERSION"
+      - name: Configure Git author
+        run: |
+          git config user.name "general-ai-spec[bot]"
+          git config user.email "general-ai-spec[bot]@users.noreply.github.com"
+      - name: Dispatch one task group
+        run: >-
+          codex exec --ephemeral --dangerously-bypass-approvals-and-sandbox
+          -C "$GITHUB_WORKSPACE"
+          'Use $change-dispatch. Execute exactly one eligible auto task group,
+          follow the atomic claim protocol, and leave unrelated files untouched.'

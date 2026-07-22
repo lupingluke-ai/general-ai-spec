@@ -2,9 +2,9 @@
 
 ## 前提条件
 
-- Node.js 18+
+- Node.js 22（生成的 GitHub Actions 也固定使用 Node 22）
 - pnpm 已安装
-- Git 已初始化
+- Git 已安装；目标没有仓库时 init 会创建 `main`，目标若只是另一个仓库的子目录则拒绝执行
 - **GitHub 远程仓库已创建，且 `gh auth status` 通过**——`change-propose` 需要创建 Draft PR，`change-review` 需要合并 PR；没有远程仓库流水线走不到 propose 之后
 - Claude Code 或 Codex 已安装（用于规划和审查）
 - 至少选择一种 dispatch runner（Codex Desktop / Claude Code `/loop` / cron / GitHub Actions / 手动），详见下文
@@ -19,14 +19,31 @@ bash scripts/init.sh --list
 # 初始化项目（示例：Next.js + React + 本地存储）
 bash scripts/init.sh --stack nextjs-react-local --dir /path/to/project
 
+# Drizzle stack 如需脚本同时启动本地 PostgreSQL，必须显式 opt-in
+START_LOCAL_SERVICES=true bash scripts/init.sh --stack nextjs-react-drizzle --dir /path/to/project
+
 # 先预览，不实际写入
 bash scripts/init.sh --stack nextjs-react-local --dir /path/to/project --dry-run
 ```
+
+路径应指向现有 Git 仓库根目录，或不属于任何其他仓库的新目录。不要把目标设为当前仓库的普通子目录；init 会为避免嵌套仓库而 STOP。
+
+若项目已经由 General AI Spec 初始化并用于 Codex，只需接入 Claude Code：
+
+```bash
+bash scripts/cc-onboard.sh --dry-run
+bash scripts/cc-onboard.sh
+# 显式升级框架自有 runtime tools 与五个 skills
+bash scripts/cc-onboard.sh --refresh-framework
+```
+
+onboarding 会校验 `AGENTS.md`、`openspec/config.yaml` 与 `product/backlog.md`。缺任一项说明它不是完整 General AI Spec 项目，应使用 `init.sh`。
 
 ## 初始化后的目录结构
 
 ```
 project/
+├── _DIR.md                   ← 项目根目录索引
 ├── CLAUDE.md                  ← Claude Code adapter 入口（共享规则在 AGENTS.md）
 ├── AGENTS.md                  ← AI Agent 行为规范
 ├── product/
@@ -57,31 +74,51 @@ project/
 ├── .logs/
 │   ├── _DIR.md                ← 日志格式与规则说明
 │   ├── module-designer/       ← module-designer 日志
+│   │   └── _DIR.md
 │   ├── prd/                   ← prd-writer 日志
+│   │   └── _DIR.md
 │   ├── dispatch/              ← change-dispatch 执行日志（任意 runner）
+│   │   └── _DIR.md
 │   ├── propose/               ← change-propose 日志
+│   │   └── _DIR.md
 │   └── review/                ← change-review 日志
+│       └── _DIR.md
 ├── src/
 │   ├── _DIR.md
 │   └── app/
 │       └── _DIR.md
+├── scripts/
+│   ├── _DIR.md
+│   ├── governance-publish.sh ← 共享治理状态经 PR 发布
+│   ├── render-roadmap.mjs    ← roadmap AUTO 段确定性渲染
+│   └── validate-change.mjs   ← propose/dispatch/review 结构校验
+├── public/
+│   └── _DIR.md
+├── .github/
+│   ├── _DIR.md
+│   └── workflows/
+│       ├── _DIR.md
+│       ├── ci.yml
+│       ├── propose.yml
+│       ├── dispatch.yml
+│       └── review.yml
 ├── .env.local                 ← 环境变量模板
-└── .gitignore                 ← 已包含 .worktrees
+└── .gitignore                 ← 已包含 .worktrees、环境变量、依赖与构建产物
 ```
 
 ## Skills 安装
 
-init.sh 会自动将框架 skills 符号链接到项目中：
+init.sh 会把框架 skills 复制为项目自有的可移植版本，并为 Claude Code 建相对链接：
 
 ```
-.agents/skills/               ← Codex / 其他 agent 使用
+.agents/skills/               ← 真实目录；Codex / 其他 agent 使用
   ├── module-designer/
   ├── prd-writer/
   ├── change-propose/
   ├── change-dispatch/
   └── change-review/
 
-.claude/skills/                ← Claude Code 使用
+.claude/skills/                ← 指向 ../../.agents/skills/... 的相对符号链接
   ├── module-designer/
   ├── prd-writer/
   ├── change-propose/
@@ -89,7 +126,9 @@ init.sh 会自动将框架 skills 符号链接到项目中：
   └── change-review/
 ```
 
-> skill 本身 runner-agnostic，只依赖 git + shell + 网络。无论哪个 agent 调用，都执行相同的 dispatch 逻辑。
+> skill 协议 runner-agnostic，但 runner 仍须具备项目工具链、agent CLI、Git/GitHub 写入凭证和网络。项目移动到另一台机器后，skills 不依赖原框架绝对路径。
+
+OpenSpec 1.6 初始化时可能提示 `openspec/project.md` 属于 legacy context。这里无需删除：本框架在 `openspec/config.yaml` 的 `context` 中显式引用它，并继续用它维护详细技术基线与 Directory Structure。
 
 ## 执行日志
 
@@ -136,7 +175,12 @@ init.sh 自动创建 `.logs/` 目录及五个子目录。各阶段 skill 在遇�
 
 ### 方式 D — GitHub Actions
 
-参考 `skills/change-dispatch/SKILL.md` 的 GitHub Actions 示例自行配置定时 runner。
+初始化已生成 propose / dispatch / review 三个 workflow。在仓库 Secrets 配置：
+
+- `OPENAI_API_KEY`：Codex CLI 调用模型。
+- `DISPATCH_GITHUB_TOKEN`：具备分支、PR 与合并所需权限的 token；同时保证 agent push 能触发后续 CI/workflow。
+
+使用专用、最小仓库权限的 fine-grained PAT 或 GitHub App token，不要复用个人高权限 token。三个 workflow 都从受信任的 `main` checkout，支持手动触发和 schedule，并使用 concurrency key 防止同类运行重叠；它们只适合 GitHub-hosted 临时 runner。
 
 ### 方式 E — 一次性手动触发
 
@@ -149,24 +193,30 @@ init.sh 自动创建 `.logs/` 目录及五个子目录。各阶段 skill 在遇�
 pnpm install
 
 # 确认代码质量
+pnpm test
 pnpm lint
+pnpm build
 
 # 确认文件存在
-ls AGENTS.md CLAUDE.md openspec/project.md openspec/config.yaml product/backlog.md .github/workflows/ci.yml src/_DIR.md
+ls AGENTS.md CLAUDE.md openspec/project.md openspec/config.yaml product/backlog.md \
+  .github/workflows/ci.yml .github/workflows/propose.yml \
+  .github/workflows/dispatch.yml .github/workflows/review.yml \
+  scripts/governance-publish.sh scripts/validate-change.mjs src/_DIR.md
 ```
 
 ## CI 与合并策略
 
 `init.sh` 已生成 `.github/workflows/ci.yml`（test / lint / build），dispatch 的每次 push 与 PR 都会触发。
 
-**默认路径（零仓库配置）：** `change-review` 在本地跑完同样的 CI 三件套并 rebase 到最新 main 后，直接 `gh pr merge --merge` 完成合并，同一轮继续 verify + 归档。远端 `ci.yml` 作为第二道观测保障，不阻塞合并。
+`change-review` 在 feature branch 最新 SHA 上完成本地 CI、rebase 和三维 Verify 后才允许合并 implementation PR。合并后的 specs/archive/backlog 更新再通过 deterministic governance PR 发布；所有 main 写入都兼容 branch protection。
 
-**可选加固（推荐生产项目）：** 在 GitHub 仓库设置中：
+**推荐仓库设置：**
 
-1. 开启 branch protection，将 CI workflow 的 `ci` job 配置为 required check
-2. 开启 "Allow auto-merge"
+1. main 要求通过 PR 合并，禁止 force push。
+2. 将 CI workflow 的 `ci` job 配置为 required check。
+3. 开启 "Allow auto-merge"，供无人值守运行在 checks 通过后继续。
 
-配置后，`change-review` 的即时合并会因 checks 未跑完被拒，自动退化为 `gh pr merge --auto --merge`（GitHub 等 checks 绿后合并），下一轮 review 扫描到 MERGED 后继续 verify + 归档。**只开 branch protection 而不开 auto-merge 会导致 review STOP**——两项要么都开，要么都不开。
+checks pending 时 review 会进入 PENDING/auto-merge，下一次定时扫描从 PR 状态续跑。仓库若要求人工 approving review，自动化会等待而不是绕过规则。
 
 ## 下一步
 

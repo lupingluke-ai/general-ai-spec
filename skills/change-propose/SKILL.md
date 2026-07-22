@@ -1,13 +1,13 @@
 ---
 name: change-propose
-description: Propose an OpenSpec change — scan backlog or accept a specific B-NNN, check PRD readiness and dependencies, generate four-piece set (proposal/specs/design/tasks) on feature branch, create Draft PR, and update main indexes. Works both as one-shot (`/change-propose B-045`) and scheduled by a runner.
+description: Propose an OpenSpec change — scan backlog or accept a specific B-NNN, check PRD readiness and dependencies, generate four-piece set (proposal/specs/design/tasks) on a feature branch, create a Draft PR, and publish main indexes through a recoverable governance PR.
 ---
 
 # Change Propose
 
 ## Overview
 
-从 approved PRD 出发，生成四件套（proposal + delta specs + design + tasks），创建 feature branch 和 Draft PR，更新 main 索引。
+从 approved PRD 出发，生成四件套（proposal + delta specs + design + tasks），创建 feature branch 和 Draft PR，并通过 governance PR 更新 main 索引。
 
 **职责边界：** 只负责 propose 阶段。执行由 `change-dispatch`，审查/归档由 `change-review` 各自独立完成。
 
@@ -125,7 +125,7 @@ mkdir -p openspec/changes/<change-id>/specs
 - **MODIFIED Requirements** — 注明之前行为
 - **REMOVED Requirements** — 注明移除原因
 
-每个需求至少一个 Given/When/Then 场景，从 PRD 验收标准和用户故事推导。
+feature 必须至少有一个 delta spec 文件；每个 ADDED/MODIFIED 需求至少包含两个 Given/When/Then 场景，分别覆盖正常与异常/边界行为。bug/chore/hotfix 若没有可观察行为规格变化，可不写 delta 文件，但必须创建 `specs/README.md`，包含 `delta-specs: none` 和具体理由，确保空 specs 决策可被 Git 跟踪和审查。
 
 ### 1.4 design.md
 
@@ -173,11 +173,11 @@ depends-on: [change-id-1, ...]
 # <change-id> Tasks
 
 ## G0 — <组名>
-<!-- 执行模式: auto | 约束: 串行，必须先完成 | status: pending -->
+<!-- 执行模式: auto | 约束: 串行，必须先完成 | status: pending | claim-id: none | claimed-at: none | heartbeat-at: none -->
 - [ ] ...
 
 ## G1-A — <组名>
-<!-- 执行模式: auto | 约束: G0 完成后，与 G1-B 并行 | status: pending -->
+<!-- 执行模式: auto | 约束: G0 完成后，与 G1-B 并行 | status: pending | claim-id: none | claimed-at: none | heartbeat-at: none -->
 - [ ] ...
 
 ## 文档与分形同步
@@ -235,8 +235,11 @@ Phase 1 完成后、Phase 2 pre-flight 前，**必须**执行以下交叉验证�
 
 ### Pre-flight 检查
 
+先运行 `node scripts/validate-change.mjs --change <change-id> --type <type> --phase propose`。下列人工语义检查作为补充，脚本失败即 STOP：
+
 - [ ] proposal.md 存在且含 Backlog Ref
-- [ ] specs/ 至少一个文件，每个需求有 Given/When/Then
+- [ ] type=feature：specs/ 至少一个 delta 文件，每个需求有 Given/When/Then，且含正常与异常/边界场景
+- [ ] type=bug/chore/hotfix：有 delta 时按 feature 规则校验；无 delta 时 `specs/README.md` 含 `delta-specs: none` 与理由
 - [ ] design.md 存在且含文件清单
 - [ ] tasks.md 存在，YAML 头 status 为 ready，≤ 300 行
 - [ ] _DIR.md 存在
@@ -248,6 +251,7 @@ Phase 1 完成后、Phase 2 pre-flight 前，**必须**执行以下交叉验证�
 
 ```bash
 git add openspec/changes/<change-id>/
+git add .logs/propose/<change-id>.md
 git commit -m "chore(<change-id>): add proposal, specs, design, and tasks
 
 Backlog-Ref: B-NNN
@@ -284,11 +288,12 @@ EOF
 
 ### 更新 Main 索引 + 模块 + Roadmap
 
-本小节是 propose 的 durable checkpoint。无论普通模式还是发布恢复模式，只有本小节 push main 成功后，dispatch / review 才能从 backlog 的 `proposed` 状态接手。
+本小节是 propose 的 durable checkpoint。无论普通模式还是发布恢复模式，只有 governance PR 合并后，dispatch / review 才能从 backlog 的 `proposed` 状态接手。
 
 ```bash
 git checkout main
-git pull origin main
+git pull --ff-only origin main
+scripts/governance-publish.sh --check --skill change-propose --scope <change-id>
 ```
 
 **1. `product/backlog.md`**：目标 B-NNN 阶段 → `proposed`；Change 列写入 `<change-id>`
@@ -300,34 +305,27 @@ git pull origin main
   - **若 frontmatter `status: planning`，升级为 `active`**（本 skill 的模块激活兜底；正常路径下 prd-writer 已经做过，但若出现某些 backlog 绕过 prd-writer 的场景，此处兜底）
   - `## 关联 Backlog` 行不携带阶段标签（阶段唯一存于 backlog.md），本步不改该小节
 
-**4. `design/roadmap.md`**：backlog 与模块文档落盘后，从它们**全量重渲染**三段 AUTO 区（渲染规则见 `core/git-safe-push.md` 的"AUTO 段重渲染"）。人工段原样保留。
+**4. `design/roadmap.md`**：backlog 与模块文档落盘后运行 `node scripts/render-roadmap.mjs --write`，暂存前运行 `--check`；禁止手写 AUTO 段。
 
 ```bash
 git add product/backlog.md
 git add openspec/changes/_DIR.md
 git add design/modules/<M-NNN>-<slug>.md
 git add design/roadmap.md
-git commit -m "chore: update backlog, module, roadmap for <change-id>
-
-Backlog-Ref: B-NNN
-Module-Ref: M-NNN
-Change-ID: <change-id>
-Backlog-Stage: proposed"
 ```
 
-**推送走 `core/git-safe-push.md` 协议**（3 轮 pull-rebase-push + 分段冲突策略）：
+把原 commit message（Backlog-Ref / Module-Ref / Change-ID / Backlog-Stage trailers）写入仓库外临时文件，调用：
 
 ```bash
-# Round 1
-git push origin main
-# 被拒（non-fast-forward）→ git pull --rebase origin main → 回到 push
-# rebase 冲突：
-#   - product/backlog.md → 按 B-NNN 主键合并
-#   - design/roadmap.md AUTO 段 → 任取一侧后从 backlog + modules 全量重渲染
-#   - design/modules/*.md 修订历史 → append 合并
-#   - 主 specs / 模块边界等策略不覆盖段 → STOP + 日志
-# 3 轮仍失败 → STOP，写日志到 .logs/propose/<change-id>.md
+scripts/governance-publish.sh \
+  --skill change-propose --scope <change-id> \
+  --title "chore(<change-id>): publish main index" \
+  --commit-file <temp-message-file> -- \
+  product/backlog.md openspec/changes/_DIR.md \
+  design/modules/<M-NNN>-<slug>.md design/roadmap.md
 ```
+
+MERGED 后输出 Proposed；PENDING 时只输出等待中的 governance PR，dispatch 继续看不到 proposed，天然不会提前接手。
 
 ### 输出
 

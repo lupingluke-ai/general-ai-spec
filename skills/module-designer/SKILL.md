@@ -29,7 +29,7 @@ description: Interactive AI skill (Claude Code or Codex) for designing product m
 
 ## 输出物清单
 
-单次运行产出（全部落 `main` 分支——设计层文档不走 feature branch）：
+单次运行产出（通过 `governance/module-designer/M-NNN-RNNN` PR 合入 main；RNNN 为该模块下一治理修订号）：
 
 1. `design/modules/M-NNN-<slug>.md`（新建或增量更新）
 2. `product/backlog.md`（新增 N 行 idea，含"模块"列 + 自动建议的 type）
@@ -44,7 +44,7 @@ description: Interactive AI skill (Claude Code or Codex) for designing product m
 
 ```bash
 git checkout main
-git pull origin main
+git pull --ff-only origin main
 ```
 
 **目的：**
@@ -73,6 +73,10 @@ ls design/modules/ | grep -oE 'M-[0-9]+' | sort -Vu | tail -1
 ```
 
 取最大值 +1；无已有模块时从 `M-001` 起。
+
+### 治理修订号（防止增量模式被永久 checkpoint 卡住）
+
+新模块使用 `R001`。已有模块按 `## 修订历史` 的有效记录数 +1 得到 `RNNN`；同一 main 快照上的并发会话会得到同一 revision scope，只有一个 governance PR 能进入，其余返回 PENDING，待先到者合并后重新同步并计算下一 revision。scope 一次只代表一次状态转换，不能永久复用裸 `M-NNN`。
 
 ### B-NNN 预分配（全局递增）
 
@@ -257,7 +261,7 @@ M-004 → M-002, M-003
 
 阶段图标按 backlog 阶段列映射：`💡 idea | 🔎 exploring | 📝 proposed | ✅ done`（backlog 4 阶段；执行细粒度看 tasks.md status）
 
-> **重渲染即幂等**：AUTO 段是 backlog + modules 的派生视图，不存储独立状态。无需"每个 skill 只改自己那行"的行级并发约定——并发冲突时任取一侧后重新渲染即可（见 git-safe-push）。
+> **重渲染即幂等**：落盘 backlog/modules 后运行 `node scripts/render-roadmap.mjs --write`，提交前运行 `--check`。AUTO 段不由 agent 手写；并发冲突解决事实源后重新运行同一渲染器。
 
 ---
 
@@ -284,9 +288,9 @@ Phase 5 完成后、Commit 前，**必须**执行以下交叉验证。
 
 ---
 
-## Phase 6 — Commit + Push
+## Phase 6 — Governance PR 发布
 
-**在 `main` 分支**直接提交（设计层文档不走 feature branch）：
+分配出 M-NNN 与本轮 RNNN 后、首次写文件前，先运行 `scripts/governance-publish.sh --check --skill module-designer --scope M-NNN-RNNN`。若返回 PENDING，本轮结束；若 READY，完成上文修改后显式暂存：
 
 ```bash
 git add design/modules/M-NNN-<slug>.md
@@ -295,29 +299,23 @@ git add product/backlog.md
 git add .logs/module-designer/M-NNN.md
 ```
 
+把以下内容写入仓库外临时 commit message 文件：
+
 ```bash
-git commit -m "design(M-NNN): <模块名> + N backlog ideas
+design(M-NNN): <模块名> + N backlog ideas
 
 Module-Ref: M-NNN
 Status: planning
-Backlogs: B-XXX, B-YYY, ..."
+Backlogs: B-XXX, B-YYY, ...
 ```
 
-**推送走 `core/git-safe-push.md` 协议**（3 轮 pull-rebase-push + 分段冲突策略）：
+调用 `scripts/governance-publish.sh --skill module-designer --scope M-NNN-RNNN --title "design(M-NNN): <模块名>" --commit-file <temp-file> -- design/modules/M-NNN-<slug>.md design/roadmap.md product/backlog.md .logs/module-designer/M-NNN.md`。
 
-```bash
-# Round 1
-git push origin main
-# 被拒 → git pull --rebase origin main → 回到 push
-# rebase 冲突：
-#   - product/backlog.md 新增行冲突（多 skill 同时落 idea）→ 按 B-NNN 升序合并
-#   - design/roadmap.md AUTO 段 → 任取一侧后从 backlog + modules 全量重渲染
-#   - design/modules/*.md 同模块并发编辑 → frontmatter status 取新、关联 Backlog / 修订历史按主键合并
-#   - 模块边界 / 技术选型段冲突 → STOP + 日志（需用户确认设计意图）
-# 3 轮仍失败 → STOP，写日志到 .logs/module-designer/M-NNN.md
-```
+- MERGED：继续输出完成简报。
+- PENDING：输出 PR URL 并结束；main 尚未生效，后续轮次先 `--check`。
+- STOP/PR conflict：按 `core/git-safe-push.md` 的主键与 AUTO 重渲染策略更新 governance branch，最多 3 轮。
 
-**编号碰撞防护（每轮 rebase 后必须执行）：** 并发的两个 `/design` 会话可能各自基于同一快照分配相同的 M-NNN / B-NNN（行级合并不会将其识别为冲突，会导致同号双义）。每轮 `git pull --rebase` 成功后、重试 push 前：
+**编号碰撞防护（每轮 governance branch 更新到最新 main 后必须执行）：** 并发的两个 `/design` 会话可能各自基于同一快照分配相同的 M-NNN / B-NNN。每轮 rebase 成功后、重试 merge 前：
 
 1. 重扫远端合入的 `design/modules/` 与 `product/backlog.md`
 2. 若本次分配的任一 M-NNN / B-NNN 已被**不同内容**的条目占用 → 本侧全部顺移重编号（新 max +1 起），同步更新：module 文档（含文件名）、backlog 行、roadmap 渲染，**以及所有指向被重编号 ID 的引用**（module `## 关联 Backlog` 行尾 `[depends-on: B-XXX]`、idea 之间的依赖关系）
@@ -351,7 +349,7 @@ git push origin main
 | Phase 3 用户未确认即中断 | 不写任何文件，下次重跑 |
 | Phase 4 写 backlog 后写 roadmap 失败 | 已写的 backlog 保留；下次 `/design review M-NNN` 会补齐 roadmap |
 | Phase 5 AUTO 段标记缺失 | 检测不到边界时用 `templates/roadmap.md.tmpl` 的标记原样注入（保持幂等） |
-| Phase 6 push 被拒（远程有新 commit）| 走 `core/git-safe-push.md`（3 轮 pull-rebase-push + 分段冲突策略）；3 轮失败 STOP 写 `.logs/module-designer/M-NNN.md` |
+| Phase 6 governance PR 冲突 | 更新确定性 governance branch，按主键合并事实源并重渲染 roadmap；3 轮失败 STOP 写 `.logs/module-designer/M-NNN.md` |
 
 ---
 
@@ -370,7 +368,7 @@ git push origin main
 - ❌ 不生成 PRD（那是 prd-writer 的职责）
 - ❌ 不生成四件套（那是 change-propose 的职责）
 - ❌ 不跨模块拆分 idea（遇到跨模块时提示用户另开 /design）
-- ❌ 不在 feature branch 操作（设计层一律落 main）
+- ❌ 不在实现 feature branch 操作（设计层通过短生命周期 governance PR 合入 main）
 - ❌ 不删除已 done 的 backlog 行
 - ❌ 不覆盖 roadmap 的人工段（只动 AUTO:* 段）
 - ❌ 不自动触发 /prd（用户读完简报后手动发起）
