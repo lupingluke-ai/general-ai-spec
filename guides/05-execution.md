@@ -1,12 +1,14 @@
 # 执行阶段：dispatch 自动开发
 
-本阶段由 **任意 runner**（Codex Desktop Automation / Claude Code `/loop` / cron / GitHub Actions / 一次性手动触发）调用 `change-dispatch` skill 执行。skill 本身与具体 agent 解耦，只要环境具备 git + shell + 网络即可运行。
+本阶段由 **任意 runner**（Codex Desktop Automation / Claude Code `/loop` / cron / GitHub Actions / 一次性手动触发）调用 `change-dispatch` skill 执行。协议与具体 agent 解耦，但运行环境必须具备项目工具链、agent CLI、Git/GitHub 凭证与网络。
 
 ## 前提
 
 - 已选好并配置至少一种 runner（见 [01-initialization.md](./01-initialization.md)）
 - 至少有一个 change 的 tasks.md `status: ready`
 - Runner 具备网络权限：`github.com` 和 `registry.npmjs.org`
+- 已安装 Node.js、pnpm 与项目依赖，并能运行 test / lint / build
+- GitHub 写入凭证可对 feature branch fast-forward push；agent 服务凭证可用
 
 ## Runner 配置（任选其一）
 
@@ -38,7 +40,7 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 
 ### 方式 D — GitHub Actions
 
-参考 `skills/change-dispatch/SKILL.md` 的 GitHub Actions 示例配置定时 runner。
+初始化已生成 `.github/workflows/dispatch.yml`。在 GitHub Secrets 配置 `DISPATCH_GITHUB_TOKEN` 与 `OPENAI_API_KEY` 后，可 schedule 或手动触发；模板使用固定 Codex CLI 版本与并发锁。
 
 ### 方式 E — 一次性手动触发
 
@@ -74,9 +76,11 @@ Step 3: 选择任务组
   → 跳过交互式任务组（`执行模式: interactive`）
   → 检查前置任务组约束
   ↓
-Step 4: 环境准备（推荐在 worktree 中）
-  → git checkout <branch-prefix>/<change-id>
-  → git pull origin <branch-prefix>/<change-id>
+Step 4: 原子认领 + 环境准备
+  → 从 origin/<feature> 建 detached worktree + 唯一 worker branch
+  → 为目标组写 claim-id / claimed-at / heartbeat-at
+  → fast-forward push HEAD:<feature>；只有成功者获得所有权
+  → 失败者丢弃 claim、刷新并重新选组，禁止 rebase 失败 claim
   → pnpm install
   ↓
 Step 5: 执行任务
@@ -89,11 +93,12 @@ Step 6: 范围校验
   → pending-sync.md 的每条待办单独验证可追溯到 design.md
   → 确保无超范围文件（超范围 → STOP）
   ↓
-Step 7: 更新状态、提交并推送
-  → 先 git pull --rebase 拉齐并行状态
-  → 基于 rebase 后的 tasks.md 勾选 checkbox、任务组 status: executing → done
+Step 7: 实现提交、汇合状态并推送
+  → 显式暂存 design 声明文件，先提交实现并确认 worktree 干净
+  → fetch + rebase 拉齐并行状态
+  → 校验 claim 仍归本 worker，再勾选 checkbox、任务组 executing → done 并清空 claim 字段
   → 如果此刻所有自动化组完成: change status → review
-  → git commit + git push origin <branch-prefix>/<change-id>
+  → 提交状态并 fast-forward push HEAD:<feature>
 ```
 
 > type 事实源是 backlog 的"类型"列（dispatch 扫描时同行直接读到），`<branch-prefix>` 由 type 映射：feature → `feat/`、bug → `fix/`、chore → `chore/`、hotfix → `hotfix/`。change-id 的命名前缀由 prd-writer 生成、propose 校验，dispatch 不做字符串反解析。详见 [11-task-types.md](./11-task-types.md)。
@@ -109,17 +114,17 @@ Step 7: 更新状态、提交并推送
 ```
 G0 (串行，必须先完成)
   ↓ G0 push 后，下一轮 dispatch fetch 到最新代码
-G1-A ∥ G1-B ∥ G1-C  (并行，各自 worktree，push 时 rebase 解决冲突)
+G1-A ∥ G1-B ∥ G1-C  (并行，各自 detached worktree + 唯一 worker branch)
   ↓ 全部完成
 标记 change status: review
 ```
 
 - **同一 change 的串行组**：按顺序领取（G0 先于 G1）
 - **同一 change 的并行组**：可被同一轮次的不同 runner 实例领取，各自 worktree 隔离
-- **同机并发必须用 worktree**：同一工作目录并发运行多个 dispatch 实例会互相破坏工作区；无 worktree 时同机同一时刻只跑一个实例（worktree 命令见 `skills/change-dispatch/SKILL.md` 的「并发与隔离」）
+- **所有并发都使用唯一 worker branch**：不得让两个 worktree checkout 同一共享 feature branch；根工作区保持 main
 - **不同 change**：完全隔离（不同 feature branch），可同时执行
-- **所有任务组在同一个 `<branch-prefix>/<change-id>` 分支上提交**
-- **Push 冲突**：通过 `git pull --rebase` 解决
+- **远端汇合点唯一**：所有组最终 fast-forward push 到同一个 `<branch-prefix>/<change-id>`，但本地执行分支彼此唯一
+- **claim 冲突**：失败者必须重新选组；实现汇合冲突才允许 fetch/rebase 后按 group-id 合并状态
 
 ## 自动化任务组执行规范
 
@@ -131,14 +136,15 @@ G1-A ∥ G1-B ∥ G1-C  (并行，各自 worktree，push 时 rebase 解决冲突
 4. **新建目录** — 必须包含 `_DIR.md`
 5. **Commit message** — 必须包含 `Change-ID: <change-id>`
 6. **更新 _DIR.md** — 创建新文件时，change 独占目录的 `_DIR.md` 直接追加条目；main 共享的 `_DIR.md` 不改，把待办写进 `openspec/changes/<change-id>/pending-sync.md`（由 change-review 归档阶段在 main 上消费）
-7. **完成后直接 push** — 推送到 feature branch
+7. **完成后汇合** — 校验 claim 所有权，清空 claim 字段，再 fast-forward push 到 feature branch
 
 ## 状态更新时机
 
 | 事件 | tasks.md 变更 | backlog 变更 |
 |------|--------------|-------------|
-| 领取任务组 | 任务组 status → executing | — |
-| 完成任务组 | checkbox 勾选, 任务组 status: executing → done | — |
+| 领取任务组 | status → executing；写 claim-id / claimed-at / heartbeat-at | — |
+| 执行中 | 每 20 分钟刷新本组 heartbeat-at | — |
+| 完成任务组 | checkbox 勾选；status → done；claim 三字段清为 none | — |
 | 所有自动化组完成 | YAML 头 status → review | 保持 proposed（backlog 细粒度由 tasks.md status 承担，dispatch 禁碰 main） |
 
 ## 你能看到什么
@@ -164,7 +170,7 @@ G1-A ∥ G1-B ∥ G1-C  (并行，各自 worktree，push 时 rebase 解决冲突
 如果某个任务组执行失败：
 
 - Runner 日志中会显示错误
-- STOP 级失败时 runner 会尽力把该任务组 `executing → pending` 释放（释放失败由 30 分钟 stale 回收兜底），下一轮即可重新领取
+- STOP 级失败时 runner 仅在确认 claim-id 仍归自己后释放 `executing → pending`；异常退出由 150 分钟 stale 回收兜底
 - 如果代码已提交但有问题，commit message 会包含 `[NEEDS-FIX]` 标记
 
 ### 依赖未满足
@@ -176,10 +182,11 @@ G1-A ∥ G1-B ∥ G1-C  (并行，各自 worktree，push 时 rebase 解决冲突
 
 ### Push 冲突
 
-如果并行任务组（G1-A、G1-B）同时 push：
+如果并行任务组（G1-A、G1-B）同时汇合：
 
-- 后 push 的一方通过 `git pull --rebase` 解决
-- 如果文件冲突（理论上不应发生——design.md 保证并行组文件不交叉），标记 `[NEEDS-FIX]` 并通知
+- claim 阶段 push 被拒的一方没有所有权，必须刷新并重新选组
+- 实现完成后的 push 被拒可 fetch/rebase，按 group-id 保留双方状态，再重新验证 claim ownership
+- 如果实现文件冲突，说明 design.md 的并行文件独占假设被破坏，STOP 并通知，不自动猜测合并语义
 
 ### 手动干预
 

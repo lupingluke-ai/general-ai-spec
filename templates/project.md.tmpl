@@ -14,7 +14,7 @@
 
 ### _DIR.md
 
-每个目录都要有一个 `_DIR.md`，用于说明：
+每个项目自有的源码、产品、规格、自动化和运行记录目录都要有一个 `_DIR.md`，用于说明：
 - 这个目录负责什么
 - 子目录如何分工
 - 哪些文件是关键入口
@@ -25,15 +25,17 @@
 
 ### 约束
 
-- 单文件不超过 300 行
+- 实现源码与 tasks.md 不超过 300 行；长篇 guide/skill/reference 按章节组织，不受机械行数限制
 - 文档更新是实现过程的一部分，不是收尾动作
 - 顶层结构变化时同步更新本文件的 Directory Structure
+- 依赖/构建缓存、`.git/` 以及 `.codex/`、`.claude/`、`.agents/skills/` 等外部工具管理目录不在 `_DIR.md` 约束内
 
 ---
 
 ## Directory Structure
 
 ```text
+_DIR.md
 design/
 ├── _DIR.md
 ├── roadmap.md
@@ -63,7 +65,17 @@ product/
 ├── _DIR.md
 └── workflows/
     ├── _DIR.md
-    └── ci.yml
+    ├── ci.yml
+    ├── dispatch.yml
+    ├── propose.yml
+    └── review.yml
+scripts/
+├── _DIR.md
+├── governance-publish.sh
+├── render-roadmap.mjs
+└── validate-change.mjs
+public/
+└── _DIR.md
 src/
 ├── _DIR.md
 └── app/
@@ -83,7 +95,7 @@ src/
 ```
 
 随着项目演进，目录会扩展，但必须遵守：
-- 每个目录维护 `_DIR.md`
+- 每个项目自有目录维护 `_DIR.md`
 - 关键源码文件维护 `@input/@output/@pos` 头注释
 - 顶层结构变化时同步更新本节
 
@@ -93,10 +105,12 @@ src/
 
 初始化脚本完成后，至少要验证：
 - `pnpm install` 成功
-- `pnpm lint` 成功
 - `pnpm test` 成功
+- `pnpm lint` 成功
+- `pnpm build` 成功
 - `AGENTS.md`、`openspec/project.md`、`openspec/config.yaml` 已落位
 - `product/backlog.md` 已存在
-- `.github/workflows/ci.yml` 已存在
+- `.github/workflows/{ci,propose,dispatch,review}.yml` 已存在
+- `scripts/{governance-publish.sh,render-roadmap.mjs,validate-change.mjs}` 已存在且可执行
 - `src/_DIR.md` 与 `src/app/_DIR.md` 已存在
 - `.env.local` 已生成

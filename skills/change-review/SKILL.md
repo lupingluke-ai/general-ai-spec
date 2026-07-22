@@ -1,17 +1,17 @@
 ---
 name: change-review
-description: Interactive AI skill (Claude Code or Codex) for reviewing dispatch-completed changes. Uses branch-centric model where review happens via PR. Handles PR review, fractal documentation sync on branch, PR merge to main, three-dimension verify, delta specs sync, archiving, and backlog status update. Use when dispatch runner has completed task groups (status review) or when manually triggered.
+description: Interactive AI skill (Claude Code or Codex) for reviewing dispatch-completed changes. Uses branch-centric review, performs hard checks and three-dimension Verify before merge, then publishes specs/archive/backlog updates through a recoverable governance PR. Use when dispatch runner has completed task groups (status review) or when manually triggered.
 ---
 
 # Change Review & Archive
 
 ## Overview
 
-接管 dispatch runner 执行完成后的全部收尾流程：PR 审查 → 分形同步（在 branch 上）→ 本地 CI → rebase → **合并 → verify → sync specs → 归档 → 更新 backlog，默认在同一次调用内走完（单轮闭环）**。
+接管 dispatch runner 执行完成后的全部收尾流程：PR 审查 → 分形同步（在 feature branch 上）→ 本地 CI → rebase → **三维 Verify → 合并实现 PR → main-side sync → governance archive PR → 更新 backlog**。
 
 **Branch-Centric 模型：** 四件套和实现代码都在 feature branch 上，通过 PR 审查和合并。审查者可在 PR diff 中同时看到方案（四件套）和实现（代码），确保一致性。
 
-**单轮闭环 + 恢复路径：** 本地 CI 绿 + rebase 到最新 main 后直接 `gh pr merge --merge`，随后立刻在 main 上 verify + archive——一次调用完成一个 change 的全部收尾。只有当仓库配置了 required checks 导致即时合并被拒时，才退化为 `gh pr merge --auto --merge`（GitHub 等 checks 绿后异步合并），本次调用结束，下一次调用通过"Merged PR 恢复扫描"从 verify 继续。任何一步中断，重跑本 skill 都能从状态推断断点续跑。
+**可恢复闭环：** 所有可能阻止交付的硬检查都在实现 PR 合并前完成。required checks 尚未完成时启用 auto-merge 并结束本轮；实现 PR 合并后，归档与共享治理文件通过确定性 `governance/change-review/<change-id>` PR 发布。重跑本 skill 会同时检查实现 PR 与 governance PR，因而不会重复 sync、move 或提交。
 
 **Announce at start:** "Running change-review: checking for changes ready for review."
 
@@ -86,7 +86,7 @@ dispatch push 后 CI 自动运行。CI 全绿 + tasks.md status 为 `review` 即
 gh pr list --state merged --head <branch-prefix>/<change-id> --json number,headRefName,mergedAt
 ```
 
-若 PR 已 merged，且 main 上仍存在 `openspec/changes/<change-id>/tasks.md`，读取 main 上的 tasks.md。若 YAML 头 `status: review`，说明上一次调用已合并 PR 但尚未完成 archive（兜底 --auto 路径或中断）；进入**恢复模式**（Step 5 verify → Step 6 archive）。若 change 目录已移入 `openspec/changes/archive/` 且 tasks.md status 为 `done`，视为已完成并跳过。
+若实现 PR 已 merged，且 main 上仍存在 `openspec/changes/<change-id>/tasks.md`，读取 main 上的 tasks.md。若 YAML 头 `status: review`，说明三维 Verify 已在合并前通过、但 archive 尚未完成；进入**恢复模式**（Step 5 main-side prep → Step 6 archive）。若 change 目录已移入 `openspec/changes/archive/` 且 tasks.md status 为 `done`，继续检查远端 feature branch 并做幂等清理。
 
 如果没有待审查的 change，提示用户 "No changes ready for review."
 
@@ -96,13 +96,13 @@ gh pr list --state merged --head <branch-prefix>/<change-id> --json number,headR
 
 | PR 状态 | CI 状态 | tasks.md status | 本次行为 |
 |---------|---------|-----------------|---------|
-| Draft | — | review | **完整闭环**：Step 2 审查 → Step 3 分形同步 → Step 3.5 本地 CI → Step 3.8 rebase → Step 4 合并 → Step 5 verify → Step 6 archive |
-| Open (Ready) | 绿 | review | 刷新状态后仍未合并 → `gh pr merge --merge` 补合并 → 继续 Step 5-6 |
+| Draft | — | review | **完整闭环**：Step 2 审查 → Step 3 分形同步 → Step 3.5 CI → Step 3.8 rebase → Step 3.9 Verify → Step 4 合并 → Step 5-6 governance archive |
+| Open (Ready) | 绿 | review | 确认最新 SHA 已通过 Step 3.9，再补执行合并 → 继续 Step 5-6 |
 | Open (Ready) | 红 | review | 回 Step 3.5 修复循环 → push → 重走 Step 3.8 起 |
 | Open (Ready) | pending + `autoMergeRequest` 非空 | review | `--auto` 已挂起等待 checks → 本次跳过，等下次扫描 |
 | Open (Ready) | pending + `autoMergeRequest` 为空 | review | 上次可能中断在 `gh pr ready` 后 → 进入 Step 4 恢复合并；即时合并被 required checks 拒绝时再启用 `--auto` |
-| MERGED | — | review | **恢复模式**：上次在合并后中断 → 从 Step 5 verify → Step 6 archive 续跑 |
-| MERGED | — | done | **跳过**：已完成 |
+| MERGED | — | review | **恢复模式**：先检查 `governance/change-review/<change-id>`；PENDING 等待，READY 从 Step 5 main-side prep → Step 6 archive 续跑 |
+| MERGED | — | done | **幂等收尾**：归档已完成；若远端 feature branch 仍存在则删除，然后跳过 |
 
 检查 PR 状态：
 ```bash
@@ -112,6 +112,8 @@ gh pr view <pr-number> --json state,isDraft,statusCheckRollup,autoMergeRequest
 ## Step 2 — PR Review（在 Feature Branch 上）
 
 对待审查 change 的 PR 执行以下检查：
+
+首先在 feature branch 运行 `node scripts/validate-change.mjs --change <change-id> --type <type> --phase review`，结构、terminal groups、auto 状态或 optional specs marker 不合法时 STOP。
 
 - [ ] **Spec 合规**：实现匹配 design.md 文件清单和技术方案
 - [ ] **Delta Specs 合规**：实现覆盖 delta specs 中的 ADDED/MODIFIED 场景
@@ -130,7 +132,7 @@ gh pr view <pr-number> --json state,isDraft,statusCheckRollup,autoMergeRequest
 
 ```bash
 git checkout <branch-prefix>/<change-id>
-git pull origin <branch-prefix>/<change-id>
+git pull --ff-only origin <branch-prefix>/<change-id>
 ```
 
 对照 design.md 中的 `_DIR.md` 清单逐条处理：
@@ -163,10 +165,11 @@ git ls-tree origin/main -- <path-to-_DIR.md>
 - [ ] src/features/_DIR.md — 追加条目: voice/（新建目录）· 记录方: review · YYYY-MM-DD
 ```
 
-commit + push（仅 change 独占部分）：
+commit + push（仅 change 独占部分，按实际存在路径显式暂存）：
 
 ```bash
-git add -A
+git add -- <changed-change-owned-paths...> openspec/changes/<change-id>/tasks.md
+# pending-sync.md 与 review 日志仅在实际存在/修改时分别执行 git add
 git commit -m "chore(<change-id>): fractal documentation sync (change-owned)
 
 Backlog-Ref: B-NNN
@@ -184,7 +187,7 @@ pnpm lint
 pnpm build
 ```
 
-如果全部通过 → 直接进入 Step 4。
+如果全部通过 → 进入 Step 3.8。
 
 如果任一失败 → 进入自动修复循环（最多 2 轮）：
 
@@ -253,86 +256,77 @@ git push --force-with-lease origin <branch-prefix>/<change-id>
 
 此步必然触发 Draft PR 内容更新 + 远程 CI 重新运行（如有）。本地 CI 三件套已在 Step 3.5 保证通过，因此**无需等待远程 checks**即可进入 Step 4——若仓库配置了 required checks 且尚未完成，Step 4 的即时合并会被拒并自动走 `--auto` 兜底路径。若可查询远程 checks 且发现红灯（本地绿远程红，多为环境差异）→ 回到 Step 3.5 自动修复循环。
 
-## Step 4 — 合并 PR（单轮闭环的关键步）
+## Step 3.9 — 合并前全景一致性与三维 Verify
 
-本地 CI 全绿 + 已 rebase 到最新 main 后，标记 Ready 并**直接合并**：
+所有可能产生 STOP 的硬检查都必须在 PR 合并前执行。发现偏离时写入 `.logs/review/<change-id>.md`，修复后重新运行 Step 3.5、3.8、3.9。
 
-```bash
-gh pr ready <pr-number>
-gh pr merge <pr-number> --merge
-```
-
-合并策略固定为 merge commit（`--merge`，等价 `--no-ff`），保留 feature branch 完整提交历史。合并成功 → **同一次调用内继续 Step 5 verify → Step 6 archive**。
-
-**兜底路径（仅在即时合并被拒时）：**
-
-1. **仓库配置了 required checks 且尚未跑完** → `gh pr merge <pr-number> --auto --merge`（启用 GitHub auto-merge，checks 绿后由 GitHub 异步合并）。本次调用对该 change 到此结束；下一次调用由状态机的 `Open (Ready)` / `MERGED` 行续跑。若仓库未开启 auto-merge 功能导致 `--auto` 也失败 → STOP 写日志，提示开启仓库 auto-merge 或由 maintainer 手动合并。
-2. **分支保护规则拒绝合并**（如需要 approving review）→ STOP 写日志，提示人工处理。
-
-> 本地 CI 三件套（Step 3.5）+ rebase-before-merge（Step 3.8）已在合并前保证质量与无冲突；required checks 是可选的第二道闸门，不是主路径依赖。
-
-## 复盘检查点 A — 合并后全景一致性
-
-PR 合并完成后（同一轮内，或恢复模式进入时）、Verify 前，执行以下交叉验证。发现偏离时写入 `.logs/review/<change-id>.md`。
-
-R1 只比较**实现文件集**。change 治理产物（`openspec/changes/<change-id>/` 下的 proposal / specs / design / tasks / `_DIR.md` / `pending-sync.md`）由 Pre-flight、Spec 与状态检查单独验证，不计入 design.md 的实现文件差集。
+R1 只比较**实现文件集**。change 治理产物（`openspec/changes/<change-id>/`）和本 change 审计日志（`.logs/{propose,dispatch,review}/<change-id>.md`）由 Pre-flight、状态与日志格式检查单独验证，不计入 design.md 的实现文件差集。
 
 | # | 检查项 | 检查方法 | 偏离类型 |
 |---|--------|----------|---------|
 | R1 | PR 实际实现文件集 = design.md 完整文件清单 | `gh pr diff --name-only` 排除 change 治理产物后对比 design.md | 范围偏离 |
 | R2 | 没有 `[NEEDS-FIX]` 标记残留在代码中 | grep 代码库 `NEEDS-FIX` | 方案偏离 |
 | R3 | tasks.md 所有自动化任务组（`执行模式: auto`，兼容旧 `执行工具: Codex`）status 为 done | 解析 tasks.md HTML 注释 | 一致性偏离 |
-| R4 | delta specs 每个 ADDED 场景有对应的新文件/新函数 | specs → 代码追溯 | 范围偏离 |
+| R4 | delta specs 每个 ADDED/MODIFIED 场景都有实现位置与测试/验证证据；REMOVED 场景确认行为不存在 | specs → 代码与测试追溯表 | 范围偏离 |
 
 **偏离处理：**
 - **R1 范围偏离** → 写日志 → STOP（需人工确认是否接受额外文件）
 - **R2 NEEDS-FIX 残留** → 写日志 → 自动修复或 STOP
 - **R3/R4 一致性偏离** → 写日志 → STOP（不应在此阶段出现）
 
+### Completeness（完备性）
+
+- [ ] 所有 auto 任务组与「文档与分形同步」已完成
+- [ ] 每个 delta 场景都有实现与验证证据；optional empty specs 有 `specs/README.md` 理由
+- [ ] pending-sync.md 每条待办都能追溯到 design.md，且将在归档 governance PR 消费
+
+### Correctness（正确性）
+
+- [ ] 代码行为匹配 proposal Intent
+- [ ] `pnpm test`、`pnpm lint`、`pnpm build` 全绿
+
+### Coherence（一致性）
+
+- [ ] 实际实现文件与 design.md 清单一致
+- [ ] 新文件头注释、新目录 `_DIR.md` 完整
+- [ ] main-shared `_DIR.md` 与 `openspec/project.md` 的变更已进入 pending-sync/main-side prep 计划
+
+通过后勾选「Verify」任务组并设为 done，运行 `node scripts/validate-change.mjs --change <change-id> --type <type> --phase premerge`；校验通过后只暂存 tasks.md 与实际存在的 review 日志，commit/push feature branch。push 后重新确认 required checks 针对最新 SHA 运行。
+
+## Step 4 — 合并 PR（单轮闭环的关键步）
+
+Step 3.9 全部通过后，标记 Ready 并合并：
+
+```bash
+gh pr ready <pr-number>
+gh pr merge <pr-number> --merge
+```
+
+合并策略固定为 merge commit。即时合并被 required checks 拒绝时启用 `gh pr merge <pr-number> --auto --merge`；PENDING 时结束本轮，下一轮从 MERGED 恢复。需要人工 approving review 时保持 PENDING，不绕过保护规则；只有明确拒绝、权限不足或不可恢复冲突才 STOP。
+
 ---
 
-## Step 5 — Verify（三维度，在 Main 上）
+## Step 5 — Main-side Coherence Prep（合并后、可恢复）
 
 ```bash
 git checkout main
-git pull
+git pull --ff-only origin main
+scripts/governance-publish.sh --check --skill change-review --scope <change-id>
 ```
 
-### 5.0 Main-side coherence prep
+返回 PENDING 时立即结束，不重复 sync/archive；返回 MERGED 时确认 archive 已在 origin/main，进入幂等分支清理；READY 时继续。
 
-在执行三维度 Verify 前，先在 main 上同步会影响 Coherence 判断的治理层文档：
+在 main 工作区准备最终治理层文档，所有修改稍后通过 archive governance PR 一次发布：
 
 1. 更新 `openspec/project.md` 的 Directory Structure（如本 change 增删了顶层结构）
 2. 读取 **`openspec/changes/<change-id>/pending-sync.md`**（PR 合并后已在 main 上；dispatch 与 review 在执行期共同追加）：逐条在 main 上更新对应的 main-shared `_DIR.md`，完成一条勾选一条
 3. 若 `pending-sync.md` 不存在（本 change 未触碰共享 `_DIR.md`，或历史 change），跳过
 
-这一步只处理 verify 所需的一致性文档；delta specs sync、change archive、backlog done 仍在 Step 6 执行。
-
-### Completeness（完备性）
-
-- [ ] tasks.md 中自动化任务组与「文档与分形同步」任务组已完成；「Verify」与「归档」任务组可在本轮继续推进
-- [ ] delta specs 中每个 ADDED/MODIFIED 场景都有对应实现
-- [ ] delta specs 中每个 REMOVED 场景确认已不存在
-
-### Correctness（正确性）
-
-- [ ] 代码行为匹配 proposal.md 中的 Intent
-- [ ] `pnpm test` 通过
-- [ ] `pnpm lint` 通过
-- [ ] `pnpm build` 通过
-
-### Coherence（一致性）
-
-- [ ] 实际目录结构匹配 design.md 的文件清单
-- [ ] 所有新文件有 `@input/@output/@pos` 头注释
-- [ ] 所有新目录有 `_DIR.md`
-- [ ] `openspec/project.md` Directory Structure 已更新
-
-完成后更新 tasks.md：勾选「Verify」任务组的所有 checkbox，将其 `status: pending` 改为 `status: done`。
+若工作区已有上次中断留下的 archive 变更，先检查变更是否全部落在 6.4 allowlist：是则直接恢复暂存/发布；存在范围外 tracked 修改则 STOP。未跟踪且与 allowlist 无关的用户文件保持不动。
 
 ## 复盘检查点 B — 归档前完整性
 
-Step 5 Verify 完成后、归档前，执行以下检查。发现偏离时写入 `.logs/review/<change-id>.md`。
+Step 3.9 Verify 已完成；main-side prep 后、归档前执行以下检查。发现偏离时写入 `.logs/review/<change-id>.md`。
 
 | # | 检查项 | 检查方法 | 偏离类型 |
 |---|--------|----------|---------|
@@ -373,7 +367,7 @@ Step 5 Verify 完成后、归档前，执行以下检查。发现偏离时写入
 2. 按待追加 / 更新 / 删除的子项操作（插入新条目、保序）
 3. 修改后写回，并在 `pending-sync.md` 中勾选该条
 
-此步**只在 main 上执行**，不开 feature branch、不走 PR。与 6.1 sync delta specs 并列，都是归档阶段的 main 侧写操作。`pending-sync.md` 在 6.2 归档时随 change 目录一起移入 `archive/`，保留完整处理痕迹。
+此步在本地 `main` 快照上准备，不回写 feature branch；它与 6.1 sync delta specs 一起进入 Step 6.4 的 governance PR。`pending-sync.md` 在 6.2 归档时随 change 目录移入 `archive/`，保留完整处理痕迹。
 
 **为什么不在 Step 3 / dispatch 直接改共享 `_DIR.md`：** feature branch 独立存在期间，同一个 `_DIR.md` 可能被多个并行 change 各自修改（比如 change-A 加 `voice/`、change-B 加 `billing/`）。如果都在 feature branch 上改，merge 时 git 会看到同一文件同一段双向修改 → 冲突。推迟到 main 上串行处理，由 `git-safe-push` 协议处理并发。
 
@@ -412,7 +406,7 @@ Step 5 Verify 完成后、归档前，执行以下检查。发现偏离时写入
 
 #### 6.3.3 Roadmap（全量重渲染）
 
-backlog（6.3.1）与模块文档（6.3.2）落盘后，从它们**全量重渲染** `design/roadmap.md` 的三段 AUTO 区（渲染规则见 `core/git-safe-push.md` 的"AUTO 段重渲染"）：
+backlog（6.3.1）与模块文档（6.3.2）落盘后运行 `node scripts/render-roadmap.mjs --write`，暂存前运行 `--check`。渲染器按以下规则生成三段 AUTO 区：
 
 - `AUTO:ARCHITECTURE`：遍历 `design/modules/*.md` frontmatter 生成模块表
 - `AUTO:DEPENDENCIES`：由模块 `depends-on` 生成邻接表
@@ -420,30 +414,37 @@ backlog（6.3.1）与模块文档（6.3.2）落盘后，从它们**全量重渲�
 
 人工段（愿景 / 原则 / 里程碑）原样保留。重渲染幂等——即使上游 skill 曾漏更新某行，本次渲染自动拉齐。
 
-### 6.4 Commit + Push（走 git-safe-push 协议）
+### 6.4 Governance PR 发布归档
+
+只暂存本 change 的明确路径，禁止全仓 `git add -A`：
 
 ```bash
-git add -A
+git add -A -- openspec/changes/<change-id>
+git add -A -- openspec/changes/archive/<change-id>
+git add -- openspec/specs/
+git add -- openspec/changes/_DIR.md
+git add -- openspec/project.md
+git add -- product/backlog.md
+git add -- design/modules/<M-NNN>-<slug>.md
+git add -- design/roadmap.md
+git add -- <pending-sync 中实际更新的共享 _DIR.md...>
+git add -- .logs/review/<change-id>.md
 ```
+
+不存在的可选日志或 pending-sync 路径不要传给 `git add`。把原归档 commit message 写入仓库外临时文件，调用：
 
 ```bash
-git commit -m "chore(<change-id>): archive change and sync specs
-
-Backlog-Ref: B-NNN
-Module-Ref: M-NNN
-Change-ID: <change-id>
-Backlog-Stage: done"
+scripts/governance-publish.sh \
+  --skill change-review --scope <change-id> \
+  --title "chore(<change-id>): archive and sync specs" \
+  --commit-file <temp-message-file> -- \
+  openspec/changes/<change-id> openspec/changes/archive/<change-id>/ \
+  openspec/specs/ openspec/changes/_DIR.md openspec/project.md \
+  product/backlog.md design/modules/<M-NNN>-<slug>.md design/roadmap.md \
+  <updated-shared-_DIR.md...> .logs/review/<change-id>.md
 ```
 
-**推送走 `core/git-safe-push.md` 协议**（3 轮 pull-rebase-push + 分段冲突策略）：
-
-```bash
-# Round 1
-git push origin main
-# 被拒 → git pull --rebase origin main → 回到 push
-# rebase 冲突 → 按 git-safe-push 冲突解决策略处理
-# 3 轮仍失败 → STOP，写日志（类型："archive push 失败"）
-```
+MERGED 后进入 6.5；PENDING 时本轮结束，下轮先 `--check`，不得重复执行 sync/move；STOP 时按语义冲突策略处理。
 
 冲突落在本 skill 范围内可自动处理的段：
 - `product/backlog.md` / `design/roadmap.md` AUTO 段 / `design/modules/M-NNN.md` 的 `## 关联 Backlog` / `## 修订历史`
@@ -451,17 +452,17 @@ git push origin main
 
 冲突落在主 specs（`openspec/specs/**.md`）→ **STOP**（spec 合并涉及语义，禁止自动化；需人工检查 change 的 delta specs 是否与 main 上已有的另一 change 同步产生的 delta 冲突）。
 
-> `git add -A` 会包含 `openspec/specs/` 同步、`openspec/changes/archive/<change-id>/` 归档目录、`product/backlog.md`、`design/modules/<M-NNN>-*.md`、`design/roadmap.md`、Step 6.1.5 更新的共享 `_DIR.md`、`.logs/review/<change-id>.md`（如有）全部变更。
+> 发布器会拒绝任何超出 allowlist 的 staged 文件，因此用户未跟踪文件和其他 change 不会被归档提交带入。
 
-### 6.5 Clean up branch（archive push 成功后）
+### 6.5 Clean up branch（governance PR 合并后）
 
-只有 Step 6.4 的 main push 成功后，才删除远程 feature branch：
+只有 Step 6.4 返回 MERGED、确认 archive 已在 `origin/main` 后，才删除远程 feature branch：
 
 ```bash
 git push origin --delete <branch-prefix>/<change-id>
 ```
 
-若删除失败，追加 WARN 到 `.logs/review/<change-id>.md`，并按 `core/git-safe-push.md` 做一次仅包含日志的补充提交；不得回滚已完成的 archive。这样即使 archive push 曾失败，下一轮 review 仍可通过 feature branch 或 merged PR 恢复扫描继续处理。
+若删除失败，记录 WARN 并保留分支供下轮幂等清理；不得回滚已完成的 archive，也不得为单纯清理警告再制造治理 PR。
 
 ---
 
@@ -482,9 +483,10 @@ change-dispatch (any runner — Codex Automation / Claude Code `/loop` / cron / 
   → 执行：scan backlog → fetch branch → implement → push → PR 自动更新 + CI 运行
 
 change-review (interactive agent: Claude Code / Codex)  ← 本 skill
-  → 单轮闭环：PR review → fractal sync → 本地 CI + 自动修复 → rebase → gh pr merge --merge
-  → 同轮继续：verify on main → archive → backlog done
-  → （仅 required checks 未跑完时退化为 --auto 兜底，下次调用从 MERGED 恢复续跑）
+  → PR review → fractal sync → 本地 CI + 自动修复 → rebase → pre-merge Verify
+  → 实现 PR merge（checks 未完成时 auto-merge）
+  → main-side prep → governance archive PR → backlog done
+  → 任一步中断均由实现 PR + governance PR 状态恢复
   → 归档收尾：模块修订历史追加；若该模块最后一条 backlog done → 模块 status active → done；roadmap AUTO 段全量重渲染
 ```
 
@@ -514,7 +516,7 @@ review 过程中遇到 STOP/WARN 级别时，**必须**追加记录到 `.logs/re
 | 范围越界 | 修改了 design.md 未声明的文件 |
 | 合并冲突 | PR 与 main 冲突 |
 | 本地 CI 修复失败 | Step 3.5 自动修复 2 轮后仍红 |
-| 合并被拒且无法兜底 | `--merge` 与 `--auto --merge` 均失败（auto-merge 未开启 / 分支保护要求人工 review）|
+| 合并被拒且无法兜底 | checks 与所需 approval 已满足后仍因权限/策略明确拒绝，或存在不可恢复冲突；单纯等待人工 review 是 PENDING |
 | 远程 CI 红 | `--auto` 兜底后 checks 失败，Step 3.5 修复 2 轮仍红 |
 | Verify 完备性失败 | tasks.md 有未完成项 |
 | Verify 正确性失败 | test/lint/build 不通过 |
@@ -554,7 +556,7 @@ review 过程中遇到 STOP/WARN 级别时，**必须**追加记录到 `.logs/re
 
 ## 触发方式
 
-- **手动**：用户告诉 Claude Code 或 Codex "审查已完成的 change"（单轮闭环，一次触发即可完成合并 + 归档）
+- **手动**：用户告诉 Claude Code 或 Codex "审查已完成的 change"；若 required checks 或 governance PR 仍在等待，下一次触发会从 durable checkpoint 续跑
 - **定期（推荐，全自动闭环必需）**：`/loop <interval> /change-review` 或其他定时 runner 定期扫描 `status: review`；兜底路径（--auto 等待 checks）与中断恢复都依赖下一次扫描续跑
 - **PR 事件**：dispatch push 后 CI 全绿，PR 自动更新，用户或交互式 agent 发现后触发
 - **通知**：dispatch runner 完成后（Codex Automation 会有 inbox 通知，其他 runner 见 `.logs/dispatch/` 日志），用户手动触发

@@ -70,10 +70,10 @@ General AI Spec 的处理方式：
 | 问题 | 框架机制 |
 |---|---|
 | 需求漂移 | PRD approved 门控 + OpenSpec proposal / delta specs |
-| 结构漂移 | 分形文档：每个目录 `_DIR.md`，关键文件 `@input/@output/@pos` |
-| 并发混乱 | feature branch + worktree + tasks.md claim 状态 |
+| 结构漂移 | 分形文档：每个项目自有目录 `_DIR.md`，关键文件 `@input/@output/@pos` |
+| 并发混乱 | detached worktree + 唯一 worker branch + fast-forward claim |
 | 无法追踪 | `design inputs -> module -> backlog -> PRD -> change -> PR -> archive` |
-| 无法收尾 | `change-review` 单轮闭环（审查→合并→verify→archive）+ 断点续跑 |
+| 无法收尾 | `change-review` 合并前 Verify + 合并后 governance archive PR + 断点续跑 |
 
 ---
 
@@ -85,7 +85,7 @@ flowchart TB
   STACKS["stacks/<br/>技术栈 Profile<br/>Next.js local<br/>Next.js + Drizzle"]
   SKILLS["skills/<br/>AI Skill 流水线<br/>design / prd / propose / dispatch / review"]
   TEMPLATES["templates/<br/>项目初始化模板"]
-  SCRIPTS["scripts/<br/>init.sh 一键初始化"]
+  SCRIPTS["scripts/<br/>初始化 / 校验 / 渲染 / governance 发布"]
   GUIDES["guides/<br/>中文操作手册"]
 
   CORE --> TEMPLATES
@@ -138,7 +138,7 @@ flowchart TB
 | `change-review/` | 审查层 | 交互式 agent | PR 审查、三维 verify、specs 同步、archive、backlog done |
 
 > [!TIP]
-> `change-dispatch` 是 runner-agnostic：只要求运行环境具备 git、shell 和网络。它不关心由 Codex Automation、Claude Code `/loop`、cron、GitHub Actions 还是一次性手动触发。
+> `change-dispatch` 的协议不绑定 runner，但环境必须安装项目工具链、agent CLI，并具备模型凭据、GitHub 写权限与网络。init 生成的 Actions workflow 已完整配置 Node/pnpm/Codex CLI；本地 runner 需提供等价能力。
 
 ---
 
@@ -150,7 +150,7 @@ flowchart TB
 openspec/changes/<change-id>/
 ├── _DIR.md          # change 目录说明
 ├── proposal.md      # Intent / Scope / Approach / Impact
-├── specs/           # Delta Specs: ADDED / MODIFIED / REMOVED
+├── specs/           # feature 必填 delta；其他类型可用 README.md 声明 none
 ├── design.md        # 文件清单、接口设计、并行计划、冲突矩阵
 └── tasks.md         # 任务组、执行模式、状态机
 ```
@@ -158,7 +158,7 @@ openspec/changes/<change-id>/
 | 文件 | 回答的问题 |
 |---|---|
 | `proposal.md` | 为什么做、做什么、不做什么、怎么做 |
-| `specs/` | 哪些行为被新增、修改、移除，用 Given/When/Then 验证 |
+| `specs/` | feature 用 delta 描述行为；bug/chore/hotfix 无行为变化时记录 none 理由 |
 | `design.md` | 要改哪些文件，如何并行，哪些文档要同步 |
 | `tasks.md` | 哪些任务由 runner 自动做，哪些留给 review 或人工 |
 
@@ -175,7 +175,7 @@ flowchart LR
   G1A --> R["tasks.md status: review"]
   G1B --> R
   G1C --> R
-  R --> V["change-review<br/>verify + archive"]
+  R --> V["change-review<br/>pre-merge Verify + archive PR"]
 
   W1["Runner 1<br/>worktree"] -. claim .-> G1A
   W2["Runner 2<br/>worktree"] -. claim .-> G1B
@@ -192,10 +192,10 @@ flowchart LR
   class R,V review;
 ```
 
-- G0/G1/G2 是逻辑任务组，不是子分支。
-- 所有任务组提交到同一个 `<branch-prefix>/<change-id>` feature branch。
-- runner 领取任务时把任务组 `pending -> executing` 并 push，作为轻量分布式锁。
-- worktree 用于隔离并行执行，push 前通过 rebase 合并提交序列。
+- G0/G1/G2 是逻辑任务组；每次执行使用本地唯一 `worker/<change>/<group>/<claim>` 临时分支。
+- worker worktree 从远端 feature tip detached 创建，不能 checkout 共享 feature branch。
+- claim 通过 `HEAD:<feature-branch>` fast-forward push 原子竞争；失败者必须 fetch 后重选任务组。
+- 实现先提交并清洁工作区，再 rebase 合并并行提交；最终远端仍只有一个 feature branch/PR。
 - dispatch 只执行自动化任务，不审查、不归档、不修改 main 治理层。
 
 ---
@@ -211,7 +211,7 @@ flowchart LR
 | Module | `planning -> active -> done / deprecated` | 模块生命周期，roadmap AUTO 段同步 |
 
 > [!WARNING]
-> dispatch 阶段禁止修改 main 上的共享治理文件，例如 `product/backlog.md`、`openspec/specs/**`、`openspec/project.md`、`design/roadmap.md`。这些变更由 `change-review` 在 main 上串行处理。
+> dispatch 禁止修改 main 共享治理文件。module/prd/propose/review 的 main 变更统一通过 `governance/<skill>/<scope>` PR 发布，不需要 branch-protection bypass。
 
 ---
 
@@ -221,10 +221,10 @@ flowchart LR
 
 | 规则 | 用途 |
 |---|---|
-| 每个目录维护 `_DIR.md` | 说明目录职责、子目录分工、关键入口 |
+| 每个项目自有目录维护 `_DIR.md` | 覆盖源码、产品、规格、自动化和日志目录；依赖、缓存及外部工具管理目录除外 |
 | 关键文件维护 `@input/@output/@pos` | 说明文件输入、输出和在当前层级中的位置 |
 | 文档同步是实现的一部分 | 新建目录、新增关键文件、结构变化时同步更新 |
-| 单文件不超过 300 行 | 降低上下文负担，方便 AI 与人类审查 |
+| 实现源码和 tasks.md 不超过 300 行 | 长篇 guide/skill reference 可按章节组织，但不内联大段实现代码 |
 
 示例：
 
@@ -242,8 +242,10 @@ flowchart LR
 
 ### 1. 初始化项目
 
+需要 Node.js 22；初始化固定使用 Next.js 16.2.11、OpenSpec 1.6.0，并保持 pnpm 单一包管理器。
+
 ```bash
-bash scripts/init.sh --stack nextjs-react-local --dir ./my-app
+bash scripts/init.sh --stack nextjs-react-local --dir /path/outside-this-repo/my-app
 ```
 
 可用 stack：
@@ -258,6 +260,19 @@ bash scripts/init.sh --list
 bash scripts/init.sh --stack nextjs-react-local --dry-run
 ```
 
+目标若还不是 Git 仓库，init 会创建以 `main` 为默认分支的仓库；若目标只是另一个仓库的子目录，init 会拒绝执行，避免嵌套仓库或把应用文件误写进框架仓库。
+
+已有的 General AI Spec Codex 项目只想补接 Claude Code 时使用：
+
+```bash
+bash scripts/cc-onboard.sh --dry-run
+bash scripts/cc-onboard.sh
+# 仅在确认升级框架自有 runtime tools 与 skills 时：
+bash scripts/cc-onboard.sh --refresh-framework
+```
+
+onboarding 会先校验 `AGENTS.md`、`openspec/config.yaml` 与 `product/backlog.md`；普通项目仍应走 `init.sh`。
+
 ### 2. 选择 dispatch runner
 
 任选一种：
@@ -269,6 +284,8 @@ bash scripts/init.sh --stack nextjs-react-local --dry-run
 | cron | 服务器轻量定时 |
 | GitHub Actions | 零本地依赖 |
 | 手动 `/change-dispatch` | 排查、补跑、试运行 |
+
+GitHub Actions 路径需要配置 `OPENAI_API_KEY` 和 `DISPATCH_GITHUB_TOKEN`。后者使用仅限本仓库、最小权限的 fine-grained PAT 或 GitHub App token，以便自动 push 后继续触发 CI；init 已生成 `propose.yml`、`dispatch.yml`、`review.yml`，并固定从受信任的 main 在 GitHub-hosted 临时 runner 上运行。
 
 ### 3. 录入灵感并拆成 backlog
 
@@ -288,7 +305,7 @@ design/inputs/brainstorming/<topic>.md
 /prd B-001
 # 用户审阅并将 PRD 标记为 approved
 /change-propose B-001
-# dispatch runner 自动执行
+# propose / dispatch / review workflows 可自动续跑；也可手动触发
 /change-review
 ```
 
@@ -318,7 +335,9 @@ general_ai_spec/
 ├── stacks/         # 技术栈配置层
 ├── skills/         # AI Skill 层
 ├── templates/      # 项目初始化模板
-├── scripts/        # 自动化脚本
+├── scripts/        # init、治理发布、change 校验、roadmap 渲染、协议测试
+├── tests/          # 并发 claim 与恢复协议 E2E
+├── .github/        # 框架自身 CI
 └── guides/         # 中文操作指南
 ```
 
@@ -334,7 +353,7 @@ general_ai_spec/
 | [guides/03-prd.md](guides/03-prd.md) | 从 backlog 到 PRD |
 | [guides/04-propose.md](guides/04-propose.md) | 从 approved PRD 到 OpenSpec 四件套 |
 | [guides/05-execution.md](guides/05-execution.md) | dispatch 自动执行、并行机制、异常处理 |
-| [guides/06-review-and-archive.md](guides/06-review-and-archive.md) | 审查、三维 verify、归档 |
+| [guides/06-review-and-archive.md](guides/06-review-and-archive.md) | 审查、合并前三维 Verify、governance 归档 |
 | [guides/07-status-protocol.md](guides/07-status-protocol.md) | 状态字段和生命周期 |
 | [guides/08-faq.md](guides/08-faq.md) | 常见问题 |
 | [guides/09-git-github-workflow.md](guides/09-git-github-workflow.md) | Git / GitHub 全流程 |
@@ -348,12 +367,12 @@ general_ai_spec/
 
 - **产品驱动**：所有开发从 design inputs 收敛到模块化 backlog，PRD 定义 what / why，四件套定义 how。
 - **人工门控**：PRD 必须由用户 approved，AI 不替代人做产品决策。
-- **规范治理**：每个 change 必须包含 proposal、delta specs、design、tasks。
-- **并行优先**：任务按依赖关系拆成串行 / 并行组，runner 在 worktree 中隔离执行。
+- **规范治理**：每个 change 必须包含 proposal、specs 决策、design、tasks；feature 必须有 delta。
+- **并行优先**：任务按依赖拆组，runner 通过 detached worktree + 原子 claim 隔离执行。
 - **分形文档**：目录和关键文件自带局部上下文，文档同步是实现的一部分。
-- **三维验证**：Completeness、Correctness、Coherence 缺一不可。
+- **三维验证**：Completeness、Correctness、Coherence 必须在 feature PR 合并前通过。
 - **可插拔**：core 规则通用，技术栈通过 stacks 切换，skill 可独立演进。
-- **可恢复**：STOP / WARN 写入 `.logs/`，propose / review 支持半发布恢复与归档恢复。
+- **可恢复**：STOP/WARN 写日志；feature PR 与确定性 governance PR 提供 MERGED/PENDING/STOP checkpoint。
 
 ---
 

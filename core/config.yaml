@@ -3,6 +3,12 @@
 
 schema: spec-driven
 
+automation:
+  dispatch:
+    heartbeat-interval-minutes: 20
+    stale-after-minutes: 150
+    max-task-minutes: 120
+
 context: |
   Refer to openspec/project.md for the authoritative project baseline.
   This project uses OpenSpec for specification governance and fractal
@@ -93,7 +99,8 @@ rules:
   specs:
     - 使用 Given/When/Then 描述场景
     - 需求使用 SHALL / MUST / SHOULD 术语
-    - 每个需求至少覆盖一个正常场景和一个异常或边界场景
+    - feature 的 delta specs 必填；每个需求至少覆盖一个正常场景和一个异常或边界场景
+    - bug/chore/hotfix 的 delta specs 可为空；为空时 specs/README.md 必须包含 delta-specs: none 与非空 reason
     - change 内的 delta specs 使用 ADDED/MODIFIED/REMOVED 标记
     - MODIFIED 必须注明之前的行为；REMOVED 必须注明移除原因
     - 归档时 delta specs 合并到 openspec/specs/ 对应领域文件
@@ -109,11 +116,11 @@ rules:
     - 按模块分组，checkbox 格式
     - 单个 task 粒度控制在 30 分钟到 2 小时
     - 测试或验证任务放在实现后
-    - 最后一组固定为"文档与分形同步"
-    - 文档与分形同步必须覆盖 project.md、_DIR.md 与关键文件头注释
+    - 自动化任务组之后固定为"文档与分形同步"→"Verify"→"归档"三个交互式终端组
+    - 文档与分形同步覆盖 change-owned _DIR.md 与关键文件头注释；main-shared _DIR.md 和 project.md 在 review 的 main-side coherence prep 更新
 
   verify:
-    - apply 完成后、archive 之前必须执行 verify
+    - apply 完成后、implementation PR 合并前必须执行 verify
     - 检查 completeness：tasks.md 全部勾选，delta specs 场景全覆盖
     - 检查 correctness：代码行为匹配 proposal intent
     - 检查 coherence：实际结构匹配 design.md 文件清单
@@ -121,7 +128,7 @@ rules:
     - 分形文档一致性检查（_DIR.md、头注释、project.md）
 
   archive:
-    - 归档前必须通过 verify
+    - implementation PR 合并前必须通过 verify；归档前复核其 durable 证据
     - 将 delta specs 合并到 openspec/specs/ 对应领域文件（sync）
     - ADDED 追加、MODIFIED 替换、REMOVED 删除
     - 移动 change 目录到 openspec/changes/archive/

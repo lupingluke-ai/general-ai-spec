@@ -27,7 +27,7 @@ description: Interactive AI skill (Claude Code or Codex) for generating Product 
 
 ## 输出物清单
 
-单次运行产出（全部落 `main` 分支）：
+单次运行产出（通过 `governance/prd-writer/PRD-NNN` PR 合入 main）：
 
 1. `product/prd/PRD-NNN.md`（新建，含按规则生成的 `change-id`；首次 `status: reviewing`，用户确认 approved 后改为 `approved`）
 2. `product/backlog.md`（目标 B-NNN 阶段 idea → exploring，PRD 列写入 PRD-NNN）
@@ -40,7 +40,7 @@ description: Interactive AI skill (Claude Code or Codex) for generating Product 
 
 ```bash
 git checkout main
-git pull origin main
+git pull --ff-only origin main
 ```
 
 **目的：**
@@ -169,7 +169,7 @@ git pull origin main
 
 ### 6.2 重渲染 `design/roadmap.md` AUTO 段
 
-backlog（Step 5）与模块文档（6.1）落盘后，从它们**全量重渲染**三段 AUTO 区（渲染规则见 `core/git-safe-push.md` 的"AUTO 段重渲染"）。人工段原样保留。重渲染幂等，无需"只改自己那行"的行级并发约定。
+backlog（Step 5）与模块文档（6.1）落盘后运行 `node scripts/render-roadmap.mjs --write`，提交前运行 `--check`。人工段由脚本原样保留，禁止 agent 手写 AUTO 段。
 
 ---
 
@@ -196,9 +196,9 @@ Step 6 完成后、Commit 前，**必须**执行以下交叉验证。
 
 ---
 
-## Step 7 — Commit + Push
+## Step 7 — Governance PR 发布
 
-**在 `main` 分支**直接提交：
+PRD-NNN 确定后、首次写文件前，运行 `scripts/governance-publish.sh --check --skill prd-writer --scope PRD-NNN`。PENDING 时结束等待。修改完成后显式暂存：
 
 ```bash
 git add product/prd/PRD-NNN.md
@@ -208,27 +208,19 @@ git add design/roadmap.md
 git add .logs/prd/PRD-NNN.md
 ```
 
-```bash
-git commit -m "docs(PRD-NNN): draft PRD for B-NNN
-
-Backlog-Ref: B-NNN
-Module-Ref: M-NNN
-PRD-Status: reviewing"
-```
-
-**推送走 `core/git-safe-push.md` 协议**（3 轮 pull-rebase-push + 分段冲突策略）：
+把 commit message 写到仓库外临时文件，然后调用统一发布器：
 
 ```bash
-# Round 1
-git push origin main
-# 被拒 → git pull --rebase origin main → 回到 push
-# rebase 冲突：
-#   - product/backlog.md → 按 B-NNN 主键合并
-#   - design/roadmap.md AUTO 段 → 任取一侧后从 backlog + modules 全量重渲染
-#   - design/modules/*.md 修订历史 → append 合并
-#   - 主 specs / 模块边界等策略不覆盖段 → STOP + 日志
-# 3 轮仍失败 → STOP，写日志到 .logs/prd/PRD-NNN.md
+scripts/governance-publish.sh \
+  --skill prd-writer --scope PRD-NNN \
+  --title "docs(PRD-NNN): draft PRD for B-NNN" \
+  --commit-file <temp-message-file> -- \
+  product/prd/PRD-NNN.md product/backlog.md \
+  design/modules/<M-NNN>-<slug>.md design/roadmap.md \
+  .logs/prd/PRD-NNN.md
 ```
+
+MERGED 后才进入 Step 8；PENDING 时输出 PR URL，等待下轮 `--check`；冲突按 `core/git-safe-push.md` 最多处理 3 轮。
 
 > commit 首词用 `docs`（PRD 是产品文档，非功能代码）。
 
@@ -251,20 +243,31 @@ git push origin main
 
 ```bash
 git checkout main
-git pull origin main
+git pull --ff-only origin main
+scripts/governance-publish.sh --check --skill prd-writer --scope PRD-NNN-approved
 ```
 
 - 将 `status: reviewing → approved`
 - commit message：`docs(PRD-NNN): approved`
-- push 走 `core/git-safe-push.md` 协议（3 轮 retry）
+- 只暂存 `product/prd/PRD-NNN.md`，把 approved commit message 写入仓库外临时文件，然后调用：
+
+```bash
+git add product/prd/PRD-NNN.md
+scripts/governance-publish.sh \
+  --skill prd-writer --scope PRD-NNN-approved \
+  --title "docs(PRD-NNN): approved" \
+  --commit-file <temp-message-file> -- product/prd/PRD-NNN.md
+```
+
+PENDING 时等待下轮 `--check`，MERGED 后才视为 approved 生效。
 
 **approved 是进入 `change-propose` 的硬前置。**
 
 ### 后续变更
 
-- **需求变化但 change 未开始** → 直接改 PRD 内容，保持 `approved`
-- **需求变化且 change 已执行中** → 旧 PRD 标 `superseded`，新开 B-NNN（新 PRD），走新流程
-- **用户否决** → 改 `status: draft`，回 Step 3 重新对话
+- **用户尚未 approved** → 回 Step 3 修改，保持 `reviewing`；完成后继续等待同一次人工确认
+- **approved 后出现语义需求变化** → 旧 PRD 标 `superseded`，新开 B-NNN（新 PRD），避免复用已完成 transition scope
+- **仅拼写/格式修正** → 可单独用 `PRD-NNN-correction-RNNN` governance scope，不改变行为或 AC
 
 ---
 
@@ -274,8 +277,8 @@ git pull origin main
 |---|---|
 | Step 2.2 "模块"列缺失 | 拒绝生成 PRD；提示用户走 `/design` 或 `/design review` 补齐 |
 | Step 3 对话越界 | 按 Step 3 的两档处理（小调 / 大越界） |
-| Step 6.1 module 文档并发写入冲突 | `git pull --rebase` 后重试；修订历史按 append 合并 |
-| Step 7 push 被拒 | 走 `core/git-safe-push.md`（3 轮 pull-rebase-push），3 轮失败 STOP 写日志 |
+| Step 6.1 module 文档并发写入冲突 | 更新 governance branch；修订历史按 append 合并，roadmap 重新渲染 |
+| Step 7 governance PR 冲突 | 按 `core/git-safe-push.md` 的主键策略处理，最多 3 轮；仍失败则 STOP 写日志 |
 
 ---
 
@@ -293,7 +296,7 @@ git pull origin main
 
 - ❌ 不做 idea 拆分（已下放到 `module-designer`）
 - ❌ 不跨模块写 PRD（越界时拒绝对话）
-- ❌ 不在 feature branch 操作（PRD 是产品文档，落 main）
+- ❌ 不在实现 feature branch 操作（PRD 通过短生命周期 governance PR 合入 main）
 - ❌ 不手工逐行编辑 AUTO 段（只做全量重渲染），不动 roadmap 人工段
 - ❌ 不覆盖 module 文档的人工段（只动 frontmatter 与 `## 修订历史`）
 - ❌ 不自动触发 `/change-propose`（PRD approved 后由人工或配置好的 runner 接手）

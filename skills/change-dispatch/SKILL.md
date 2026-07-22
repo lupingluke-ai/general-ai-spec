@@ -1,13 +1,13 @@
 ---
 name: change-dispatch
-description: Agent-agnostic task dispatcher. Reads backlog on main to find active changes, fetches the feature branch, reads tasks.md, picks up the next executable task group, implements it, and pushes to remote. Runnable by any agent (Codex / Claude Code / Cursor / cron / GitHub Actions / one-shot) — only requires git + shell + network.
+description: Agent-agnostic task dispatcher. Reads backlog on main to find active changes, atomically claims one task group from an isolated worker branch, implements it, and pushes it to the shared feature branch. Runnable by Codex, Claude Code, cron, GitHub Actions, or one-shot runners with the project toolchain and credentials installed.
 ---
 
 # Change Auto-Dispatch
 
 ## Overview
 
-自动扫描并领取就绪的 OpenSpec 任务组。**Runner 无关**——只要执行环境有 git 读写、shell 执行、网络访问三项能力即可运行。
+自动扫描并领取就绪的 OpenSpec 任务组。**Runner 无关**表示协议不绑定某一种 agent；执行环境仍必须具备项目声明的 Node/pnpm/技术栈工具链、agent CLI、模型凭据、GitHub 写权限和网络访问。
 
 **三层解耦：**
 
@@ -55,7 +55,7 @@ type 的事实源是 `product/backlog.md` 的**类型列**（dispatch Step 1 扫
 
 ## Runner 配置（任选其一）
 
-dispatch 对 runner 的要求**只有三项**：git 读写、shell 执行、网络访问。触发频率由项目自行配置，需保证不会长期占用分支或压垮 CI。
+dispatch 对 runner 的要求包括：git、shell、项目技术栈工具链、依赖安装能力、可调用本 skill 的 agent CLI、模型凭据、GitHub 写权限和网络。触发频率由项目自行配置，需保证不会长期占用分支或压垮 CI。
 
 ### 方式 A — Claude Code `/loop`（推荐开发期）
 
@@ -70,7 +70,7 @@ dispatch 对 runner 的要求**只有三项**：git 读写、shell 执行、网�
 ```
 Name:     change-dispatch
 Schedule: <interval>
-Worktree: yes (加速并行任务组隔离)
+Worktree: yes (必须保持 detached；skill 自建唯一 worker branch)
 Network:  allow github.com, allow registry.npmjs.org
 Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 ```
@@ -93,26 +93,12 @@ Prompt:   使用 $change-dispatch 扫描并执行就绪的任务组
 
 ### 方式 D — GitHub Actions（零本地依赖）
 
-```yaml
-# .github/workflows/dispatch.yml
-name: change-dispatch
-on:
-  schedule: [{cron: '<cron>'}]
-  workflow_dispatch: {}
-jobs:
-  dispatch:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - run: pnpm install --frozen-lockfile
-      - run: <你的 agent CLI> "/change-dispatch"
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} # Claude CLI 使用
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}       # Codex CLI 使用
-```
+init.sh 已生成可直接启用的 `.github/workflows/dispatch.yml`：固定安装 Node/pnpm 与指定版本 Codex CLI，使用完整 Git history，配置 Git author，并声明 `contents` / `pull-requests` 写权限。仓库必须配置：
 
-优点：无本地依赖；CI 环境天然隔离；日志进 Actions 面板。
+- `OPENAI_API_KEY`
+- `DISPATCH_GITHUB_TOKEN`：fine-grained PAT 或 GitHub App token，拥有 contents/pull requests write；不能使用默认 `GITHUB_TOKEN`，因为自动 push 必须继续触发 PR/CI workflows
+
+workflow 使用 GitHub-hosted ephemeral runner 执行 `codex exec --ephemeral --dangerously-bypass-approvals-and-sandbox`；该高权限参数只允许在这种一次性隔离 runner 中使用。完整事实源是 `templates/github-workflows/dispatch.yml`。
 
 ### 方式 E — 一次性手动触发
 
@@ -124,21 +110,24 @@ jobs:
 
 ### 并发与隔离
 
-- **多 runner 同时跑 dispatch 安全**：Step 3 的 `status: executing` claim 提交作为分布式锁，其他 runner fetch 到 executing 会跳过
-- **同机并发必须用 worktree**：两个 dispatch 实例在同一个工作目录并发 checkout / 编辑 / commit 会互相破坏工作区（不是"最后一次 commit 胜"）。跨机器天然隔离；同一台机器上要么保证同一时刻只有一个 dispatch 实例（如单个 `/loop`），要么每轮在独立 worktree 中执行：
+- **所有 runner 都使用唯一 worker branch**：不得把共享 feature branch 同时 checkout 到多个 worktree。
+- **claim 的锁语义来自 fast-forward push**：worker 从同一个远端 SHA 出发，只有第一个 `HEAD:<feature-branch>` push 能成功；push 被拒者必须重新 fetch、重新选组，绝不能把失败的 claim rebase 后继续执行。
+- **同机并发使用 detached worktree + 唯一 worker branch**：
 
 ```bash
-# 领取任务组后、开始实现前，为本轮创建隔离 worktree
-git worktree add .worktrees/<change-id>-<task-group> <branch-prefix>/<change-id>
-cd .worktrees/<change-id>-<task-group>
-# ... Step 4-8 全部在 worktree 内执行 ...
-# 完成 push 后清理
+# 在认领前创建隔离 worktree；WORKER_KEY 必须只含 ASCII 字母、数字、点、横线
+git fetch origin <branch-prefix>/<change-id>
+git worktree add --detach .worktrees/<worker-key> origin/<branch-prefix>/<change-id>
+git -C .worktrees/<worker-key> switch -c worker/<change-id>/<group-id>/<claim-id>
+# ... Step 3-8 都在该 worktree 内执行，push 使用 HEAD:<feature-branch> ...
+# 完成或释放 claim 后，只清理自己的 worktree / worker branch
 cd <repo-root>
-git worktree remove .worktrees/<change-id>-<task-group>
+git worktree remove .worktrees/<worker-key>
+git branch -D worker/<change-id>/<group-id>/<claim-id>
 ```
 
-> Codex Desktop Automation 勾选 `Worktree: yes` 即自动获得等效隔离；`.worktrees/` 已在 init.sh 写入 `.gitignore`。
-- **跨 runner 混用**：Codex Automation + Claude Code `/loop` + 人工 `/change-dispatch` 可同时启用，不会互相踩脚
+> Codex Desktop Automation 自带 worktree 时，也必须保持 detached/唯一 worker branch 语义；不能让桌面 worktree直接 checkout 共享 feature branch。`.worktrees/` 已由 init.sh 写入 `.gitignore`。
+- **跨 runner 混用**：只有全部 runner 都遵守相同的 fast-forward claim 协议时才安全。
 
 ---
 
@@ -179,47 +168,43 @@ git fetch origin <branch-prefix>/<change-id>
 git show origin/<branch-prefix>/<change-id>:openspec/changes/<change-id>/tasks.md
 ```
 
+在候选 worktree 创建后运行 `node scripts/validate-change.mjs --change <change-id> --type <type> --phase dispatch`；结构或状态校验失败时不 claim，写 STOP 日志。
+
 筛选条件：
 1. YAML 头 `status` 为 `ready` 或 `executing`
 2. `depends-on` 中列出的所有前置 change 在 main 的 backlog 中状态为 `done`
 
 **额外步骤 — Stale `executing` 回收（防止 worker 卡死导致永久锁死）：**
 
-对每个 `status: executing` 的任务组，读取最近一次 claim commit 的时间戳：
+对每个 `status: executing` 的任务组，从该任务组注释读取 `claim-id`，再读取该组、该 claim 的最近 heartbeat/claim commit 时间戳：
 
 ```bash
-# 读取该任务组 claim commit（commit message 匹配 "claim <group> as executing"）的时间戳
+# group-id 与 claim-id 都必须精确匹配，禁止使用跨任务组的宽泛 grep
 last_claim_ts=$(git log origin/<branch-prefix>/<change-id> \
-  --grep="claim .* as executing" --format="%ct" -1 \
+  --grep="heartbeat <group-id> <claim-id>" --format="%ct" -1 \
   -- openspec/changes/<change-id>/tasks.md)
 
-# 若距今 > 30 分钟 → 判定为 stale（worker 卡死 / OOM / runner 回收）
+# 无 heartbeat 时回退到该组的精确 claim commit
+# git log --grep="claim <group-id> as executing \[<claim-id>\]" ...
+# 两者都不存在 → STOP；不得把空时间戳按 epoch 处理
+
+# 阈值读取 openspec/config.yaml automation.dispatch.stale-after-minutes（默认 150）
+# worker 每 20 分钟更新一次 heartbeat；150 分钟覆盖最长 120 分钟任务及抖动
 now=$(date +%s)
-if (( now - last_claim_ts > 1800 )); then
-  # 降级：status: executing → pending，写日志
+if (( now - last_claim_ts > stale_after_seconds )); then
+  # 降级：status: executing → pending，清空 claim 字段，写日志
   # commit message: "chore(<change-id>): reclaim stale executing <group>"
   # 并在 .logs/dispatch/<change-id>.md 写 WARN 级别"stale executing reclaimed"
 fi
 ```
 
-**语义**：30 分钟是启发式阈值，覆盖大多数任务组执行时间；超时判定为"前一轮 worker 失联"，降级后本轮或下一轮 runner 可重新领取。被 reclaim 的任务组原已完成的代码提交（如有部分 push）保留，`pending` 语义等同"从头再跑"——dispatch Step 5 会按幂等原则重做（覆盖文件而非增量）。若实际 worker 其实还活着，它后续 push 会被 `git pull --rebase` 解决或遇到 `status` 已变化而发现冲突——这是可接受的边界代价。
+**语义**：回收阈值必须大于配置允许的最长任务时长，并由 heartbeat 续租。reclaim 前再次 fetch 并确认远端仍是同一个 `claim-id`；旧 worker 后续 push 时必须检查 claim-id，发现所有权变化就停止，禁止继续 rebase/push。
 
 **额外步骤 — 收敛检查（幂等，防止并行完成竞态导致 change 卡死）：**
 
 对每个 YAML `status: executing` 的 change，若其**所有** `执行模式: auto` 任务组的 status 均已为 `done`，说明执行已完成但 YAML 状态未收敛（典型原因：多个 runner 并行完成各自任务组时，各自基于陈旧快照判断"未全完成"，都没有把 status 推进到 review）。此时：
 
-```bash
-git checkout <branch-prefix>/<change-id>
-git pull origin <branch-prefix>/<change-id>
-# 再次确认所有 auto 任务组 status: done 且 YAML status: executing
-# 将 YAML status: executing → review
-git add openspec/changes/<change-id>/tasks.md
-git commit -m "chore(<change-id>): converge status to review
-
-Change-ID: <change-id>"
-git push origin <branch-prefix>/<change-id>
-# push 被拒 → git pull --rebase 后重试一次；仍失败留给下一轮
-```
+在 `origin/<feature-branch>` 上创建 detached worktree + 唯一 `worker/<change-id>/converge/<claim-id>`，再次确认远端快照后只修改 tasks.md，commit 并以 `HEAD:refs/heads/<feature-branch>` fast-forward push。push 被拒说明状态已前进，丢弃本地 converge commit并留给下一轮；禁止 checkout 共享 feature branch。
 
 收敛后该 change 跳过本轮领取（无 pending 任务组），继续扫描下一个 change。**此检查电平触发、重复执行无害**——即使某轮 runner 崩溃漏推状态，任意后续轮次都会把它补齐。
 
@@ -235,31 +220,33 @@ git push origin <branch-prefix>/<change-id>
 
 > **tag 语义说明**：主路径使用 `执行模式: auto | interactive`。旧 `执行工具: Codex` 视为 `auto`，旧 `执行工具: Claude Code` 视为 `interactive`，仅为兼容历史 tasks.md / 归档记录。
 
-**选定后立即认领（claim）：** 默认每个 runner 每轮只认领第一个可执行任务组。将该任务组的 `status: pending` 改为 `status: executing`；若 YAML 头为 `status: ready`，同时改为 `status: executing`。commit 并 push，作为分布式锁防止其他开发者重复领取。并行来自多个 runner/worktree 同时认领不同任务组，而不是单个 runner 抢占全部任务组。
+**选定后立即认领（claim）：** 默认每个 runner 每轮只认领第一个可执行任务组。claim 必须在唯一 worker branch/worktree 内构造，并通过对共享 feature branch 的 fast-forward push 获取所有权。
 
 ```bash
-# 切到 feature branch，拉取最新
-git checkout <branch-prefix>/<change-id>
-git pull origin <branch-prefix>/<change-id>
+# 根工作区保持 main；从远端 tip 建唯一 worker worktree/branch
+git fetch origin <branch-prefix>/<change-id>
+git worktree add --detach .worktrees/<worker-key> origin/<branch-prefix>/<change-id>
+git -C .worktrees/<worker-key> switch -c worker/<change-id>/<group-id>/<claim-id>
 
 # 修改 tasks.md：
 # - YAML status: ready → executing（若尚未进入 executing）
 # - 当前任务组 status: pending → executing
+# - 写入 claim-id / claimed-at / heartbeat-at
 
 git add openspec/changes/<change-id>/tasks.md
-git commit -m "chore(<change-id>): claim <task-group-name> as executing
+git commit -m "chore(<change-id>): claim <group-id> as executing [<claim-id>]
 
 Change-ID: <change-id>"
-git push origin <branch-prefix>/<change-id>
+git push origin HEAD:refs/heads/<branch-prefix>/<change-id>
 
 # 记录本轮实现 diff 的基线。后续 D1/D4/范围校验只比较 claim 之后的实现变更，
 # 避免把 claim commit 对 tasks.md 的状态修改误判为范围外实现。
 DISPATCH_BASE_SHA=$(git rev-parse HEAD)
 ```
 
-其他开发者下一轮 fetch 后看到 `executing` 会跳过，不会重复领取。
+push 成功才算取得 claim。push 被拒时，不得开始实现：fetch 远端、丢弃本地失败 claim、重新读取 tasks.md 并选择下一个 pending 组。最多重选 3 次；仍竞争失败则正常退出，等待下一轮。
 
-**Claim 释放规则（防止 STOP 把任务组锁死 30 分钟）：** claim 之后、任务组完成之前，凡触发 STOP 级终止（pnpm install 失败、design.md 缺失、复盘硬偏离、rebase 冲突等），终止前**尽力释放锁**：将该任务组 `status: executing → pending` 回滚，commit（message: `chore(<change-id>): release <task-group-name> after STOP`）并 push。释放失败（如网络中断）则不重试，留给 30 分钟 stale 回收兜底。释放动作只回滚 tasks.md 状态，不回滚已提交的实现代码。
+**Claim 释放规则：** claim 之后、任务组完成之前触发 STOP 时，先 fetch 并验证远端 `claim-id` 仍属于本 worker，再将该组 `executing → pending`、清空 claim 字段，commit 后通过 `HEAD:<feature-branch>` fast-forward push。释放失败由 150 分钟 stale + heartbeat 协议兜底。释放动作只改 tasks.md；已推送的部分实现代码保留供下一轮幂等恢复。
 
 ### Step 4 — 环境准备
 
@@ -278,7 +265,7 @@ pnpm install --frozen-lockfile
 6. **`_DIR.md` 更新分流**（防止触碰 main 共享治理层）：
    - **change 独占 `_DIR.md`**（`git ls-tree origin/main -- <path>` 未命中，即本 change 新建目录的 `_DIR.md`）→ 新文件条目直接追加
    - **main 共享 `_DIR.md`**（命中 origin/main，如顶层 `src/_DIR.md` / `src/features/_DIR.md`）→ **本 step 跳过不动**，把待办追加到 **`openspec/changes/<change-id>/pending-sync.md`**（change 独占文件，随 branch 合并进 main），由 `change-review` 归档阶段（Step 5.0 / 6.1.5）在 main 上统一消费
-7. Commit message 包含 `Change-ID: <change-id>`
+7. 实现完成后由 Step 7.5 创建独立实现 commit，message 包含 `Change-ID: <change-id>`
 
 **`pending-sync.md` 待办格式（不存在则创建，追加写入）：**
 
@@ -363,35 +350,56 @@ pnpm build
 
 如果测试/lint/build 失败，尝试自动修复。若实现项已完成但验证仍失败，提交当前实现并在 commit message 中标注 `[NEEDS-FIX]`，写入 `.logs/dispatch/<change-id>.md`，交给 `change-review` 的本地 CI 修复循环处理；若实现本身未完成或代码处于不可提交状态，则 STOP，不更新任务组为 done。
 
+### Step 7.5 — 提交实现并清洁工作区
+
+从 design.md 当前任务组文件清单生成显式暂存列表，只暂存：该组实现文件、change 独占 `_DIR.md`、`pending-sync.md`，以及本轮确实写入的 `.logs/dispatch/<change-id>.md`。禁止 `git add -A`。
+
+```bash
+git add -- <design-declared-files-and-existing-change-owned-_DIRs...>
+# 下列可选路径仅在本轮实际存在/修改时分别执行 git add：
+# openspec/changes/<change-id>/pending-sync.md
+# .logs/dispatch/<change-id>.md
+git commit -m "<commit-type>(<change-id>): implement <group-id>
+
+Change-ID: <change-id>"
+git status --porcelain
+```
+
+不存在的可选文件不要传给 `git add`。`git status --porcelain` 非空即 STOP：先识别并处理未暂存文件，不得带着脏工作区进入 rebase。
+
 ### Step 8 — 更新状态、提交并推送
 
 **硬规则：先 rebase 拉齐并行状态，再做"全 done"判定。** 判定必须基于 rebase 后的 tasks.md，否则并行 runner 各自基于陈旧快照判断"未全完成"，会导致所有组都 done 但 YAML status 永远停在 executing（由收敛检查兜底，但不应依赖兜底）。
 
-执行完成后（实现代码已在 Step 5 提交，此时工作区干净）：
+执行完成后（实现代码已在 Step 7.5 提交，工作区已验证干净）：
 
 ```bash
 # 1. 先拉齐并行任务组的最新状态
-git pull --rebase origin <branch-prefix>/<change-id>
+git fetch origin <branch-prefix>/<change-id>
+git rebase origin/<branch-prefix>/<change-id>
 ```
 
 2. 基于 **rebase 后的** tasks.md：
    - 勾选当前任务组的所有 checkbox
    - 将该任务组注释中的 `status: executing` 改为 `status: done`
+   - 校验 `claim-id` 仍等于本 worker，随后把 `claim-id/claimed-at/heartbeat-at` 清回 `none`
    - 如果该 change 所有自动化任务组（`执行模式: auto`，兼容旧 `执行工具: Codex`）**此刻**都已 done：将 tasks.md YAML 头的 `status` 改为 `review`
 
 ```bash
-# 3. 提交并推送
-git add -A
-git commit -m "<commit-type>(<change-id>): complete <task-group-name>
+# 3. 只提交当前任务组状态；本轮日志实际存在时再单独暂存
+git add openspec/changes/<change-id>/tasks.md
+# git add .logs/dispatch/<change-id>.md  # 仅当存在
+git commit -m "<commit-type>(<change-id>): complete <group-id>
 
 Change-ID: <change-id>"
 # <commit-type> 按类型映射：feature→feat, bug→fix, chore→chore, hotfix→fix
 
-git push origin <branch-prefix>/<change-id>
+git push origin HEAD:refs/heads/<branch-prefix>/<change-id>
 # push 被拒（又有并行 push）→ 回到 1 重试，最多 3 轮
 # tasks.md rebase 冲突 → 按任务组主键合并：保留双方各自任务组的状态更新，
 #   合并后重新执行第 2 步的"全 done"判定
-# 3 轮仍失败 → STOP，写日志（已完成的实现 commit 保留在本地，下一轮恢复）
+# 每轮 rebase 后重新验证 tasks.md 中 claim-id 仍属于本 worker；所有权变化 → STOP
+# 3 轮仍失败 → STOP，写日志（已完成的实现 commit 保留在 worker branch，下一轮恢复）
 ```
 
 ---
@@ -413,7 +421,7 @@ depends-on: [change-id-1, change-id-2]
 在每个任务组的 HTML 注释中：
 
 ```markdown
-<!-- 执行模式: auto | 约束: 串行 | status: pending -->
+<!-- 执行模式: auto | 约束: 串行 | status: pending | claim-id: none | claimed-at: none | heartbeat-at: none -->
 ```
 
 status 值：`pending` → `executing` → `done`
@@ -464,7 +472,7 @@ main (稳定基线)
 - 同机多实例并发时每轮必须在独立 worktree 中执行（见"并发与隔离"）；无 worktree 则同机同一时刻只运行一个实例
 - 同一 change 的串行任务组按顺序领取（G0 先于 G1）：dispatch 检查 G0 status 为 done 才领取 G1
 - 同一 change 的并行任务组（G1-A, G1-B）可被同一轮次的不同 runner 领取
-- 并行 push 冲突通过 `git pull --rebase` 解决
+- 并行 push 被拒后，worker fetch + rebase 到最新远端，并按 group-id 合并 tasks 状态；claim push 竞争失败是例外，必须重新选组而不是 rebase 失败 claim
 - 不同 change 完全隔离（不同 feature branch），可同时执行
 
 ## 问题日志
@@ -520,6 +528,6 @@ main (稳定基线)
 
 ## 边界
 
-- **不做**：审查、合并到 main、分形文档同步、verify、归档（这些是 change-review 的职责）
+- **不做**：审查、合并到 main、main-shared 分形文档的最终同步、verify、归档（change-owned `_DIR.md` 与 pending-sync 仍按 Step 5 维护）
 - **不做**：修改 main 上的任何文件（backlog、specs、project.md）
 - **不碰**：`执行模式: interactive` 的任务组（兼容旧 `执行工具: Claude Code`）

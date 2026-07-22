@@ -42,7 +42,7 @@ depends-on: []                          # 无前置依赖
 ```markdown
 ## 共享基础设施
 
-<!-- 执行模式: auto | 约束: 串行，必须先完成 | status: pending -->
+<!-- 执行模式: auto | 约束: 串行，必须先完成 | status: pending | claim-id: none | claimed-at: none | heartbeat-at: none -->
 ```
 
 ### 字段说明
@@ -52,8 +52,11 @@ depends-on: []                          # 无前置依赖
 | 执行模式 | `auto` / `interactive` | `auto` = 任意 dispatch runner（Codex Automation / Claude Code `/loop` / cron / GH Actions）领取；`interactive` = 交互式由 review 或人工承接。旧 `执行工具: Codex` / `执行工具: Claude Code` 保留向后兼容 |
 | 约束 | 自由文本 | 如"串行"、"G0 完成后"、"与任务组 3 并行" |
 | status | `pending` / `executing` / `done` | 任务组级别状态 |
+| claim-id | `none` / 全局唯一 claim | 远端 fast-forward claim 成功后才代表所有权 |
+| claimed-at | `none` / ISO 8601 UTC | 首次认领时间 |
+| heartbeat-at | `none` / ISO 8601 UTC | 执行中每 20 分钟刷新；超过 150 分钟可精确回收 |
 
-> **不再为每个任务组创建子分支**。所有任务组（G0 / G1-A / G1-B / G2 等）在同一个 `<branch-prefix>/<change-id>` feature branch 上线性提交，通过 `约束` 字段表达串行/并行关系。G 命名是任务组的逻辑标签，不是分支名。
+> 远端不为每个任务组保留长期子分支：所有结果汇合到同一个 `<branch-prefix>/<change-id>`。但每个 runner 必须使用短生命周期且唯一的本地 `worker/<change-id>/<group-id>/<claim-id>` 分支，不能让多个 worktree checkout 同一共享 feature branch。G 命名仍是逻辑任务组，不是长期发布分支。
 
 ---
 
@@ -173,7 +176,7 @@ T=5   dispatch runner 并行领取 G1-A、G1-B
       → tasks.md status: ready → review
       （backlog B-003 仍保持 proposed，细粒度看 tasks.md status）
 T=6   用户触发 review
-      → 交互式 agent 审查 → 合并 → verify → 归档
+      → 交互式 agent 审查 → 合并前 Verify → implementation PR 合并 → governance archive PR
       → tasks.md status: review → done
       → backlog B-003: proposed → done
 ```

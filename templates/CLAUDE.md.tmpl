@@ -9,7 +9,7 @@
 - 主开发流程：`/design` → `/prd` → `/change-propose` → dispatch runner 自动执行 → `/change-review`
 - 五层架构：`design/inputs/` → `design/modules/` → `product/backlog.md` → `product/prd/` → `openspec/changes/`
 - 全局蓝图：`design/roadmap.md`（AUTO 段从 backlog + modules 全量重渲染：ARCHITECTURE / DEPENDENCIES / PROGRESS）
-- 分形文档：每个目录维护 `_DIR.md`，关键文件维护 `@input/@output/@pos`
+- 分形文档：每个项目自有目录维护 `_DIR.md`，关键文件维护 `@input/@output/@pos`；依赖、缓存和外部工具目录除外
 - 实现顺序见 `openspec/project.md`
 - 禁止项见 `AGENTS.md ## Do NOT`
 - 执行日志：`.logs/{module-designer,prd,propose,dispatch,review}/` — STOP/WARN 问题和路径偏离自动记录
@@ -23,7 +23,7 @@
 - `/prd B-NNN` — 从 backlog 条目生成 PRD（prd-writer，要求 backlog 模块列已填）
 - `/change-propose` — 扫描 approved PRD 生成四件套 + Draft PR（可人工触发或由 runner 定期触发）
 - `change-dispatch` — 由 dispatch runner 自动执行任务组（Codex Automation / Claude Code `/loop` / cron / GH Actions 任选其一；不作为人工触发的 slash command）
-- `/change-review` — 审查、合并、verify、归档（可人工触发或由 runner 定期触发）
+- `/change-review` — 审查、合并前 Verify、实现 PR 合并、governance 归档（可人工或定期触发）
 
 OpenSpec 官方 CLI / slash commands 只作为底层能力接入，不作为本框架主路径。
 

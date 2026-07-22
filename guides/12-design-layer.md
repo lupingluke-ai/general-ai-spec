@@ -154,7 +154,7 @@ module-designer 落盘：
 |---|---|---|
 | `design/_DIR.md` | 人工 | 设计层总说明，偶尔更新 |
 | `design/roadmap.md`（人工段：愿景 / 原则 / 里程碑） | 人工 | 季度重审 |
-| `design/roadmap.md`（AUTO 段） | 写 main 状态的 skill | 从事实源全量重渲染，**勿手改** |
+| `design/roadmap.md`（AUTO 段） | governance PR 写入者 | 用统一 renderer 从事实源全量重渲染，**勿手改** |
 | `design/inputs/**` | 人工 | 原始设计资产永久保留，skill 只读 |
 | `design/modules/M-NNN-*.md`（frontmatter / 人工段） | `module-designer` | 建模块 + `/design review` |
 | `design/modules/M-NNN-*.md` 的 `## 关联 Backlog` | `module-designer` | 维护归属和 backlog 级依赖，不保存阶段 |
@@ -169,9 +169,9 @@ module-designer 落盘：
 1. 先合并事实源：`product/backlog.md` 按 B-NNN、`design/modules/*.md` 按 M-NNN / frontmatter / 修订历史处理冲突
 2. AUTO 段冲突任取一侧
 3. 从合并后的 backlog + modules 重新全量渲染三段 AUTO 区
-4. 保留 AUTO 边界外的愿景、原则、里程碑等人工内容
+4. 运行 `node scripts/render-roadmap.mjs --check`，再通过 deterministic governance PR 发布；保留 AUTO 边界外的愿景、原则、里程碑等人工内容
 
-因为派生视图可以重建，所以不再依赖“每个 skill 只改自己那一行”的脆弱约定。具体渲染与 rebase 规则见 `core/git-safe-push.md`。
+因为派生视图可以重建，所以不再依赖“每个 skill 只改自己那一行”的脆弱约定。具体渲染与 governance PR 冲突规则见 `core/git-safe-push.md`。
 
 ---
 

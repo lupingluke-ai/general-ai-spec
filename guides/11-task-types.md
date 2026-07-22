@@ -28,11 +28,11 @@
 | commit type | `feat` | `fix` | `chore`/`refactor`/`build`/`ci`/`perf`/`docs` | `fix` |
 | PR title 前缀 | `feat` | `fix` | `chore` | `fix` |
 | PRD | Full | Lite | Lite | Lite |
-| delta specs | required | optional | optional | optional |
+| delta specs | required | optional（空时需 marker） | optional（空时需 marker） | optional（空时需 marker） |
 | 流程 | standard | standard | standard | standard |
 | trailer | `Backlog-Ref` | `Backlog-Ref` | `Backlog-Ref` | `Backlog-Ref` |
 
-> 表格里**非前缀相关的所有列**（PRD 类型、delta specs、流程、trailer）都是**完全一致**的。前缀之外的差异只在交互阶段由 `prd-writer` 的 Step 3 对话澄清重点（bug/hotfix 聚焦根因、chore 聚焦目标状态、feature 聚焦用户故事）。
+> 四类任务的阶段、门禁与恢复协议完全一致；PRD 模板和 delta specs 是否允许为空按表中类型区分。bug/chore/hotfix 无可观察行为变化时必须用 `specs/README.md` 的 `delta-specs: none` + `reason:` 留下可审查证据。
 >
 > **type 建议由 `module-designer` 在 `/design` 对话中自动产生**（默认 feature；signals 包含 "bug/缺陷/修复" → bug；"重构/升级/构建/文档" → chore；"线上/紧急/P0/P1" → hotfix）。type 落到 backlog type 列后不可变，PRD / four-piece-set 都读取 backlog.type 保持一致。
 >
@@ -65,7 +65,7 @@ change-id 前缀（供 propose 校验一致性、便于 git log 过滤）命名�
                          tasks.md: draft→ready→executing→review→done
                                        │      │       │       │
                                    propose dispatch  收敛   review
-                                           (领取) (全done→review)(合并+归档)
+                                           (原子领取) (全done→review)(预合并 Verify + 归档)
 ```
 
 **Backlog 4 阶段**（main 上，治理层）：
@@ -74,14 +74,14 @@ change-id 前缀（供 propose 校验一致性、便于 git log 过滤）命名�
 - **idea**：backlog 新建条目，`type` + `模块列` 已填（由 module-designer 分配）
 - **exploring**：`/prd B-NNN` 生成 PRD（feature → Full；bug/chore/hotfix → Lite）
 - **proposed**：`/change-propose B-NNN` 生成四件套 + Draft PR，branch 按 type 映射前缀
-- **done**：verify → sync specs → archive → backlog 更新 → 若为模块最后一条，模块 status `active → done`
+- **done**：合并前 Verify → implementation merge → governance archive PR → backlog 更新 → 若为模块最后一条，模块 status `active → done`
 
 **执行细粒度**（tasks.md YAML status，change 独占）：
 
 - **draft**：change-propose 编写四件套期间
 - **ready**：pre-flight 通过，等待 dispatch 领取
-- **executing**：dispatch 领取中（`status: executing` commit 作分布式锁）
-- **review**：所有自动化任务组完成（dispatch 收敛判定），等待 change-review 审查 + 合并 + 归档（单轮闭环）
+- **executing**：dispatch 原子 claim 已 fast-forward push 成功；group comment 同时记录 claim-id/时间戳
+- **review**：所有自动化任务组完成（dispatch 收敛判定），等待 change-review 审查、合并前 Verify、实现合并与归档
 - **done**：归档完成
 
 > 为什么不让 backlog 反映执行细粒度？——dispatch runner 在 feature branch 上工作，**禁碰 main 治理层**（见 `core/AGENTS.md` Feature Branch 治理层禁改清单）。细粒度只能落在 change 独占的 tasks.md 里。

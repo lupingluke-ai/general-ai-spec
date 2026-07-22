@@ -33,7 +33,7 @@ Runtime 规则源：
 - **设计层**：`design/inputs` 原始输入、`design/modules/M-NNN-*.md` 模块边界、`design/roadmap.md` 全局 AUTO 图谱
 - **产品 Backlog**：`product/backlog.md` 是需求全景；每条 backlog 必须归属一个模块 `M-NNN`（历史迁入可为 `—`）
 - **OpenSpec**：管理 PRD 后的 proposal、delta specs、design、tasks、verify、archive
-- **分形文档**：每个目录 `_DIR.md`，关键文件 `@input/@output/@pos` 头注释
+- **分形文档**：每个项目自有目录 `_DIR.md`，关键文件 `@input/@output/@pos` 头注释；依赖、缓存与外部工具管理目录按 `core/fractal.md` 例外处理
 
 五层架构固定为：`design/inputs` → `design/modules` → `product/backlog.md` → `product/prd/` → `openspec/changes/`。
 
@@ -66,28 +66,28 @@ PRD approved 后，`change-propose`、dispatch runner 与 `change-review` 可按
 ## Artifact Contract
 
 - **任务类型与命名**：feature / bug / chore / hotfix 走同一流程；branch、commit、PR title、PRD 模板与 trailer 以 `openspec/config.yaml` 的 `task-types` 为准。
-- **Change 四件套**：每个 change 必须包含 `proposal.md` + `specs/` delta + `design.md` + `tasks.md` + `_DIR.md`；delta 语义遵循 OpenSpec 官方 skills / commands。执行期推迟的 main 共享 `_DIR.md` 更新记录在 change 目录的 `pending-sync.md`（change-owned，随分支合并流转），由 `change-review` 归档阶段在 main 上消费。
+- **Change 四件套**：每个 change 必须包含 `proposal.md` + `specs/` 目录 + `design.md` + `tasks.md` + `_DIR.md`；feature 的 delta specs 必填。bug/chore/hotfix 无行为变化时用 `specs/README.md` 的 `delta-specs: none` + 非空 `reason:` 留下可跟踪决策。非空 delta 的语义遵循 OpenSpec 官方 skills / commands。执行期推迟的 main 共享 `_DIR.md` 更新记录在 change 目录的 `pending-sync.md`，由 `change-review` 在 main 侧消费。
 - **状态唯一源**：backlog 阶段唯一存于 `product/backlog.md`；`design/roadmap.md` 的 AUTO 段是从 backlog + modules 全量重渲染的派生视图，模块文档 `## 关联 Backlog` 行不携带阶段标签。
 - **分形文档同步**：创建或修改文件时同步维护文件头、所在目录 `_DIR.md`；新建目录必须有 `_DIR.md`；顶层结构变化更新 `openspec/project.md`。
 - **日志协议**：自动化 skill 遇到 STOP / WARN 必须写 `.logs/<skill>/<artifact-id>.md`；scope 与格式以各 `SKILL.md` 和 `.logs/_DIR.md` 为准。
 
 ## Verification
 
-apply 完成后、archive 之前必须执行三维 verify：
+apply 完成后、implementation PR 合并前必须执行三维 Verify；archive 前只做 main-side/归档完整性复核：
 
 1. **Completeness**：tasks.md 全部勾选，delta specs 场景全部有实现
 2. **Correctness**：代码行为匹配 proposal intent
 3. **Coherence**：目录结构、分形文档与 design.md 一致
 
-不跳过 verify 直接归档；验证失败时按对应 `SKILL.md` 记录日志、修复或 STOP。
+不跳过 Verify 合并实现；验证失败时按对应 `SKILL.md` 记录日志、修复或 STOP。
 
 ## Git Boundaries
 
 - dispatch 永远不碰 main，只在 feature branch 工作。
-- Backlog 阶段只由主控交互式 agent（Claude Code / Codex）在 main 上更新。
+- Backlog 阶段只由主控交互式 agent（Claude Code / Codex）构造，并通过确定性 governance PR 更新 main。
 - PR 必须同时包含四件套与代码。
 - Merge 策略固定为 merge commit（`--no-ff`）。
-- 所有 main push 必须走 `core/git-safe-push.md`。
+- 所有 main 治理变更必须走 `core/git-safe-push.md` 与 `scripts/governance-publish.sh`；skill 禁止直接 push main。
 - `change-review` 在 `gh pr ready` 前必须 rebase 到最新 main。
 
 ### Feature Branch 治理层禁改清单
@@ -102,18 +102,18 @@ feature branch 禁改 main 上已存在、多 change 共享的治理层文件：
 
 ## Do NOT
 
-- 不创建超过 300 行的文件。
+- 不创建超过 300 行的实现源码或单个 tasks.md；长篇规范、指南和 skill reference 可按章节组织，但不得把大段实现代码内联其中。
 - 不使用类型逃逸（TypeScript `any`、Python `Any` 无约束等）。
 - 不硬编码 API key、secret、token。
 - 不跳过输入验证直接处理用户请求。
 - 不遗漏文件头注释、`_DIR.md` 或必要的 `openspec/project.md` 目录更新。
 - 不跳过设计层直接写 backlog；新需求必须经过 `/design`，历史遗留 backlog 用 `—` 标记模块列。
-- 不跳过 delta specs 直接写 tasks.md。
+- feature 不跳过 delta specs；bug/chore/hotfix 无行为变化时必须提交 `specs/README.md`，包含 `delta-specs: none` 与非空 `reason:`。
 - 不在没有 OpenSpec change 的前提下进行大型功能变更。
 - 不在 change 执行期调整模块边界；必须回到 `/design review M-NNN`。
 - 不手改 `design/roadmap.md` 的 `AUTO:*` 段。
 - 不在 feature branch 上修改治理层共享文件。
 - 不对 main 使用 `git push --force` / `--force-with-lease`。
-- 不绕过 `core/git-safe-push.md` 直接 `git push origin main`。
+- 不绕过 governance PR 直接 `git push origin main`。
 
 > 技术栈特定禁令由 `scripts/init.sh` 从 `stacks/<name>/do-not.md` 注入到本文件末尾；技术栈实现顺序与目录约定见 `openspec/project.md`。
